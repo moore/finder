@@ -9,8 +9,8 @@ struct NodeSequence {
 }
 
 #[derive(Debug)]
-pub struct ChannelState<const MAX: usize> {
-    nodes: Vec<NodeSequence, {MAX}>,
+pub struct ChannelState<const MAX_NODES: usize> {
+    nodes: Vec<NodeSequence, {MAX_NODES}>,
     newest: NodeId,
 }
 #[derive(Debug)]
@@ -41,7 +41,7 @@ impl<const MAX: usize> ChannelState<{MAX}> {
         })
     }
 
-    pub fn receive<T>(&mut self, envelope: &Envelope<T>, id: &EnvelopeId) -> Result<(), ChannelError> {
+    pub fn receive<T>(&mut self, envelope: &Envelope<T>, id: &EnvelopeId) -> Result<u64, ChannelError> {
         let from = envelope.from;
         let pos = self.nodes.binary_search_by_key(&from, |&ns| ns.node);
 
@@ -124,7 +124,10 @@ impl<const MAX: usize> ChannelState<{MAX}> {
         record_mut.sequence = envelope.sequence;
         record_mut.id       = *id;
 
-        Ok(())
+        let min_record = self.nodes.iter().min_by_key(|n| n.sequence)
+            .ok_or(ChannelError::Unreachable)?;
+
+        Ok(min_record.sequence)
     }
 
     

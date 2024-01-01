@@ -1,12 +1,16 @@
 #![no_std]
 
 use core::{marker::PhantomData, ops::Deref};
-use heapless::Vec;
-use postcard::{from_bytes, to_vec};
+use heapless::{Vec, FnvIndexMap};
+
+use postcard::{from_bytes, to_slice};
 use serde::{Deserialize, Serialize};
 
 mod channel;
 use channel::*;
+
+mod storage;
+use storage::*;
 
 pub trait Crypto {
     fn envelope_id<T>(&self, sealed: &SealedEnvelope<T>) -> EnvelopeId;
@@ -77,4 +81,23 @@ impl<'a, T> SealedEnvelope<'a, T> {
     pub fn id(&self, crypto: &impl Crypto) -> EnvelopeId {
         crypto.envelope_id(self)
     }
+}
+
+
+pub struct Client<const MAX_CHANNELS: usize, const MAX_NODES: usize, const MAX_RECORDS: usize, T, I: IO> {
+    channels: FnvIndexMap<ChannelId, ChannelState<MAX_NODES>, MAX_CHANNELS>,
+    storage: FnvIndexMap<ChannelId, Storage<T, I>, MAX_CHANNELS>,
+    //_phantom: PhantomData<T>,
+}
+
+impl<const MAX_CHANNELS: usize, const MAX_NODES: usize, const MAX_RECORDS: usize, T, I: IO>
+Client<MAX_CHANNELS, MAX_NODES, MAX_RECORDS, T, I> {
+    pub fn new() -> Self {
+        Self {
+            channels: FnvIndexMap::new(),
+            storage: FnvIndexMap::new(),
+            //_phantom: PhantomData::<T>,
+        }
+    }
+
 }
