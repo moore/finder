@@ -1,4 +1,4 @@
-#![no_std]
+//BOOG #![no_std]
 
 use core::{marker::PhantomData, ops::Deref};
 use heapless::{Vec, FnvIndexMap};
@@ -86,8 +86,8 @@ impl<'a, T> SealedEnvelope<'a, T> {
 
 pub struct Client<const MAX_CHANNELS: usize, const MAX_NODES: usize, const MAX_RECORDS: usize, T, I: IO> {
     channels: FnvIndexMap<ChannelId, ChannelState<MAX_NODES>, MAX_CHANNELS>,
-    storage: FnvIndexMap<ChannelId, Storage<T, I>, MAX_CHANNELS>,
-    //_phantom: PhantomData<T>,
+    storage: FnvIndexMap<ChannelId, Storage<I>, MAX_CHANNELS>,
+    _phantom: PhantomData<T>,
 }
 
 impl<const MAX_CHANNELS: usize, const MAX_NODES: usize, const MAX_RECORDS: usize, T, I: IO>
@@ -96,7 +96,7 @@ Client<MAX_CHANNELS, MAX_NODES, MAX_RECORDS, T, I> {
         Self {
             channels: FnvIndexMap::new(),
             storage: FnvIndexMap::new(),
-            //_phantom: PhantomData::<T>,
+            _phantom: PhantomData::<T>,
         }
     }
 
