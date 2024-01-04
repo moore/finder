@@ -2,17 +2,23 @@ use super::*;
 pub struct MemIO<'a, const SLAB_SIZE: usize, >
     where Self: 'a {
     slab_count: usize,
+    max_index: usize,
     start_offset: usize,
     data: &'a mut [u8],
 }
 
 impl<'a, const SLAB_SIZE: usize> MemIO<'a, SLAB_SIZE> {
-    pub fn new(data:&'a mut [u8]) -> Self {
-        Self {
+    pub fn new(data:&'a mut [u8]) -> Result<Self, StorageError> {
+        let max_index = data.len().checked_div(SLAB_SIZE)
+            .ok_or(StorageError::Unreachable)?;
+
+        let result = Self {
             slab_count: 0,
+            max_index,
             start_offset: 0,
             data
-        }
+        };
+        Ok(result)
     }
 }
 
@@ -45,17 +51,16 @@ impl<'a, const SLAB_SIZE: usize> IO
         Ok(writer)
     }
 
-    fn get_slab<'b>(&'b self, cursor: &mut Cursor) -> Result<Slab<'b>, StorageError> {
-        if cursor.slab >= self.data.len() / SLAB_SIZE {
+    fn get_slab<'b>(&'b self, index: usize) -> Result<Slab<'b>, StorageError> {
+        if index >= self.max_index {
             return Err(StorageError::OutOfBounds)
         }
 
         // BUG: Used checked math
-        let slab_start = (self.start_offset + (cursor.slab * SLAB_SIZE)) % self.data.len();
+        let slab_start = (self.start_offset + (index * SLAB_SIZE)) % self.data.len();
         let slab_slice: &'b [u8]  = &self.data[slab_start..(slab_start + SLAB_SIZE)];
 
-        let records:Slab<'b>  = Slab::new(slab_slice, cursor)?;
-        //cursor.offset = records.get_head().offset; // BOOG FOOT GUN
+        let records:Slab<'b>  = Slab::new(slab_slice, index)?;
         Ok(records)
     }
 
@@ -85,11 +90,8 @@ impl<'a, const SLAB_SIZE: usize> IO
         Ok(())
     }
 
-    fn get_head(&self) -> Result<Cursor, StorageError> {
-        Ok(Cursor {
-            slab: self.start_offset,
-            offset: 0,
-        })
+    fn get_head(&self) -> Result<usize, StorageError> {
+        Ok(self.start_offset)
     }
 }
 

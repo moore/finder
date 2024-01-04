@@ -5,7 +5,7 @@ use super::*;
 fn test_mem_io_new() -> Result<(), StorageError> {
 
     let mut data = [0; 128];
-    let io: MemIO<'_, 64> = new_io(&mut data);
+    let io: MemIO<'_, 64> = new_io(&mut data)?;
     assert_eq!(io.free_slabs()?, 2);
     Ok(())
 }
@@ -14,7 +14,7 @@ fn test_mem_io_new() -> Result<(), StorageError> {
 fn test_storage_new() -> Result<(), StorageError> {
 
     let mut data = [0 ; 4000];
-    let io: MemIO<'_, 1000> = new_io(&mut data);
+    let io: MemIO<'_, 1000> = new_io(&mut data)?;
 
     let storage = Storage::new(io);
 
@@ -25,7 +25,7 @@ fn test_storage_new() -> Result<(), StorageError> {
 #[test]
 fn test_storage_write_read() -> Result<(), StorageError> {
     let mut data = [0 ; 64];
-    let io: MemIO<'_, 64> = new_io(&mut data);
+    let io: MemIO<'_, 64> = new_io(&mut data)?;
     let mut storage = Storage::new(io);
     let mut writer = storage.get_writer()?;
     let mut data = [0;1];   
@@ -66,6 +66,6 @@ fn test_storage_write_read() -> Result<(), StorageError> {
     Ok(())
 }
 
-fn new_io<'a, const DB_SIZE: usize, const SLAB_SIZE: usize>(data: &'a mut [u8 ; DB_SIZE]) -> MemIO<'a, SLAB_SIZE> {
+fn new_io<'a, const DB_SIZE: usize, const SLAB_SIZE: usize>(data: &'a mut [u8 ; DB_SIZE]) -> Result<MemIO<'a, SLAB_SIZE>, StorageError> {
     MemIO::new(data)
 }

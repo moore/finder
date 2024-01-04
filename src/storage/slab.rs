@@ -11,12 +11,12 @@ pub struct Slab<'a> {
 }
 
 impl<'a> Slab<'a> {
-    pub fn new(data: &'a [u8], cursor: &Cursor) -> Result<Self, StorageError> {
-        let (count, mut offset) = read_u32(data, cursor.offset)?;
+    pub fn new(data: &'a [u8], index: usize) -> Result<Self, StorageError> {
+        let (count, mut offset) = read_u32(data, 0)?;
         let (slab_max_sequence, offset) = read_u64(data, offset)?;
 
         Ok(Slab {
-            slab: cursor.slab,
+            slab: index,
             offset, 
             count, 
             slab_max_sequence, 

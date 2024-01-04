@@ -39,11 +39,11 @@ pub trait IO {
     fn slab_size(&self) -> usize;
     fn free_slabs(&self) -> Result<usize, StorageError>;
     fn slab_count(&self) -> Result<usize, StorageError>; 
-    fn get_slab<'a>(&'a self, cursor: &mut Cursor) -> Result<Slab<'a>, StorageError>;
+    fn get_slab<'a>(&'a self, index: usize) -> Result<Slab<'a>, StorageError>;
     fn new_writer<'a>(&'a mut self) -> Result<SlabWriter<'a, Self>, StorageError> where Self: Sized;
     fn write_record(&mut self, offset: usize, record: &Record) -> Result<usize, StorageError>;
     fn commit(&mut self, record_count: u32, max_sequence: u64, offset: usize) -> Result<(), StorageError>;
-    fn get_head(&self) -> Result<Cursor, StorageError>;
+    fn get_head(&self) -> Result<usize, StorageError>;
 }
 
 
@@ -90,12 +90,10 @@ impl<I> Storage<I> where I: IO {
 impl<I> Storage<I> where I: IO {
 
     fn get_cursor_from(&self, sequence: u64) -> Result<Option<Cursor>, StorageError> {
-        let mut cursor = self.io.get_head()?;
+        let mut index = self.io.get_head()?;
 
-        // FIXME: This should be binary search over slabs
-        // instead of a linear scan.
         loop {
-            let slab = match self.io.get_slab(&mut cursor)  {
+            let slab = match self.io.get_slab(index)  {
                 Ok(slab) => slab,
                 Err(e) => {
                     match e {
@@ -109,7 +107,7 @@ impl<I> Storage<I> where I: IO {
                 }
             };
 
-            let mut cursor = slab.get_head(); // BOOG: FOOT GUN
+            let mut cursor = slab.get_head();
 
             while let Some(record) = slab.read(&mut cursor)? {
                 if record.max_sequence >= sequence {
@@ -127,7 +125,7 @@ impl<I> Storage<I> where I: IO {
     }
 
     fn read<'a>(&'a self, cursor: &mut  Cursor) -> Result<&'a [u8], StorageError> {
-        let slab = self.io.get_slab(cursor)?;
+        let slab = self.io.get_slab(cursor.slab)?;
 
         let record = slab.read(cursor)?
             .ok_or(StorageError::OutOfBounds)?;
