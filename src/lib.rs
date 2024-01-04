@@ -1,4 +1,4 @@
-//BOOG #![no_std]
+#![no_std]
 
 use core::{marker::PhantomData, ops::Deref};
 use heapless::{Vec, FnvIndexMap};

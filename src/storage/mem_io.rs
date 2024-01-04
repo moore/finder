@@ -39,14 +39,13 @@ impl<'a, const SLAB_SIZE: usize> IO
         // BUG: used checked math
         let start = self.start_offset + ((self.slab_count) * SLAB_SIZE);
         let end = start + SLAB_SIZE;
-        dbg!(self.data.len(), start, end);
         
         let writer = SlabWriter::new(self, start);
 
         Ok(writer)
     }
 
-    fn get_slab<'b>(&'b self, cursor: &Cursor) -> Result<Slab<'b>, StorageError> {
+    fn get_slab<'b>(&'b self, cursor: &mut Cursor) -> Result<Slab<'b>, StorageError> {
         if cursor.slab >= self.data.len() / SLAB_SIZE {
             return Err(StorageError::OutOfBounds)
         }
@@ -56,22 +55,24 @@ impl<'a, const SLAB_SIZE: usize> IO
         let slab_slice: &'b [u8]  = &self.data[slab_start..(slab_start + SLAB_SIZE)];
 
         let records:Slab<'b>  = Slab::new(slab_slice, cursor)?;
-
+        //cursor.offset = records.get_head().offset; // BOOG FOOT GUN
         Ok(records)
     }
 
+
     fn write_record(&mut self, offset: usize, record: &Record) -> Result<usize, StorageError> {
-        let mut offset = offset;
+        let mut len_offset = offset;
         // BUG: what if usize is u64
-        offset = write_u32(record.data.len() as u32, self.data, offset)?;
-        offset = write_u64(record.max_sequence, self.data, offset)?;
-        let end = offset.checked_add(record.data.len())
+        let offset = len_offset.checked_add(size_of::<u32>())
             .ok_or(StorageError::OutOfBounds)?;
 
-        let slice = self.data.get_mut(offset..end)
+        let target = &mut self.data[offset..];
+        let wrote = to_slice(record, target)?;
+        let wrote_len = wrote.len();
+        write_u32(wrote_len as u32, self.data, len_offset)?;
+
+        let end = offset.checked_add(wrote_len)
             .ok_or(StorageError::OutOfBounds)?;
-        
-        slice.copy_from_slice(record.data);
 
         Ok(end)
     }

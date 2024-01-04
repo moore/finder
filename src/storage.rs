@@ -39,7 +39,7 @@ pub trait IO {
     fn slab_size(&self) -> usize;
     fn free_slabs(&self) -> Result<usize, StorageError>;
     fn slab_count(&self) -> Result<usize, StorageError>; 
-    fn get_slab<'a>(&'a self, cursor: &Cursor) -> Result<Slab<'a>, StorageError>;
+    fn get_slab<'a>(&'a self, cursor: &mut Cursor) -> Result<Slab<'a>, StorageError>;
     fn new_writer<'a>(&'a mut self) -> Result<SlabWriter<'a, Self>, StorageError> where Self: Sized;
     fn write_record(&mut self, offset: usize, record: &Record) -> Result<usize, StorageError>;
     fn commit(&mut self, record_count: u32, max_sequence: u64, offset: usize) -> Result<(), StorageError>;
@@ -47,7 +47,7 @@ pub trait IO {
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Record<'a> {
     max_sequence: u64,
     offset: usize,
@@ -72,22 +72,15 @@ impl<I> Storage<I> where I: IO {
     fn read_record<'a>(&self, data: &'a [u8], offset: usize) -> Result<(Record<'a>, usize), StorageError> {
         let at = offset;
         let (length, offset) = read_u32(data, offset)?;
-        let (max_sequence, offset) = read_u64(data, offset)?;
 
         // BUG: what happens if usize is smaller then u32?
         let end_offset = offset.checked_add(length as usize)
           .ok_or(StorageError::CorruptDB)?;
 
+        let mut record: Record<'_> = from_bytes(&data[offset..end_offset])?;
 
-        let record_slice = data.get(offset..end_offset)
-            .ok_or(StorageError::CorruptDB)?;
+        record.offset = at;
 
-        let record = Record {
-            max_sequence,
-            offset: at,
-            data: record_slice,
-        };
-    
         Ok((record, end_offset))
     }
 
@@ -98,12 +91,11 @@ impl<I> Storage<I> where I: IO {
 
     fn get_cursor_from(&self, sequence: u64) -> Result<Option<Cursor>, StorageError> {
         let mut cursor = self.io.get_head()?;
-        dbg!(&cursor, sequence);
+
         // FIXME: This should be binary search over slabs
         // instead of a linear scan.
         loop {
-            dbg!("getting slab");
-            let slab = match self.io.get_slab(&cursor)  {
+            let slab = match self.io.get_slab(&mut cursor)  {
                 Ok(slab) => slab,
                 Err(e) => {
                     match e {
@@ -117,10 +109,9 @@ impl<I> Storage<I> where I: IO {
                 }
             };
 
-            dbg!("got slab");
-            let mut maby_record = slab.read(&mut cursor)?;
-            dbg!(&maby_record);
-            while let Some(record) = &maby_record {
+            let mut cursor = slab.get_head(); // BOOG: FOOT GUN
+
+            while let Some(record) = slab.read(&mut cursor)? {
                 if record.max_sequence >= sequence {
                     cursor.offset = record.offset;
                     return Ok(Some(cursor));
@@ -131,13 +122,12 @@ impl<I> Storage<I> where I: IO {
                 Some(v) => cursor.slab = v,
                 None => return Ok(None),
             }
-            dbg!(&cursor);
         }
 
     }
 
     fn read<'a>(&'a self, cursor: &mut  Cursor) -> Result<&'a [u8], StorageError> {
-        let slab = self.io.get_slab(&cursor)?;
+        let slab = self.io.get_slab(cursor)?;
 
         let record = slab.read(cursor)?
             .ok_or(StorageError::OutOfBounds)?;
