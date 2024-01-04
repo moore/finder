@@ -116,21 +116,40 @@ impl<I> Storage<I> where I: IO {
                 }
             }
 
-            match cursor.slab.checked_add(1) {
-                Some(v) => cursor.slab = v,
+            match index.checked_add(1) {
+                Some(v) => index = v,
                 None => return Ok(None),
             }
         }
 
     }
 
-    fn read<'a>(&'a self, cursor: &mut  Cursor) -> Result<&'a [u8], StorageError> {
+    fn read<'a>(&'a self, mut cursor: Cursor) -> Result<Option<(&'a [u8], Cursor)>, StorageError> {
         let slab = self.io.get_slab(cursor.slab)?;
+ 
+        if let Some(record) = slab.read(& mut cursor)? {
+            return Ok(Some((record.data, cursor)));
+        }
 
-        let record = slab.read(cursor)?
-            .ok_or(StorageError::OutOfBounds)?;
+        let Some(next_index) = cursor.slab.checked_add(1) else {
+            return Ok(None);
+        };
+
+        if next_index >= self.io.slab_count()? {
+            return Ok(None);
+        }
+            
+        let slab = self.io.get_slab(next_index)?;
         
-        Ok(&record.data)
+        cursor = slab.get_head();
+        
+        if let Some(record) = slab.read(& mut cursor)? {
+            return Ok(Some((record.data, cursor)));
+        }
+
+        // This could only happen if there was an empty
+        // slab which should not happen
+        Err(StorageError::Unreachable)
     }
 
     fn write_slab(&mut self, records: &[Record]) -> Result<(), StorageError> {

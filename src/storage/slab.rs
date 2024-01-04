@@ -35,6 +35,13 @@ impl<'a> Slab<'a> {
         let at = cursor.offset;
         let (length, offset) = read_u32(self.records, at)?;
 
+        // We don't really track the end of what is used
+        // so if we read a zero length we assume we are 
+        // passed the end. This is kinda janky.
+        if length == 0 {
+            return Ok(None);
+        }
+
         // BUG: what happens if usize is smaller then u32?
         let end_offset = offset.checked_add(length as usize)
           .ok_or(StorageError::CorruptDB)?;
