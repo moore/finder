@@ -33,7 +33,6 @@ fn test_storage_write_read() -> Result<(), StorageError> {
     for i in 0..3 {
         data[0] = i as u8;
         let record = Record {
-            offset: 0,
             max_sequence: i,
             data: &data,
         };
@@ -82,7 +81,6 @@ fn test_storage_write_read2() -> Result<(), StorageError> {
     for i in 0..3 {
         data[0] = i as u8;
         let record = Record {
-            offset: 0,
             max_sequence: i,
             data: &data,
         };
@@ -96,7 +94,6 @@ fn test_storage_write_read2() -> Result<(), StorageError> {
     for i in 3..6 {
         data[0] = i as u8;
         let record = Record {
-            offset: 0,
             max_sequence: i,
             data: &data,
         };

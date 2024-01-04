@@ -31,7 +31,7 @@ impl<'a> Slab<'a> {
         }
     }
 
-    pub fn read(&self, cursor: &mut Cursor) -> Result<Option<Record<'a>>, StorageError> {
+    pub fn read(&self, mut cursor: Cursor) -> Result<Option<(Record<'a>, Cursor)>, StorageError> {
         let at = cursor.offset;
         let (length, offset) = read_u32(self.records, at)?;
 
@@ -52,11 +52,9 @@ impl<'a> Slab<'a> {
 
         let mut record: Record<'_> = from_bytes(slice)?;
 
-        record.offset = at;
-
         cursor.offset = end_offset;
 
-        Ok(Some(record))
+        Ok(Some((record, cursor)))
     }
 }
 

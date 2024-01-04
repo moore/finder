@@ -25,7 +25,7 @@ impl From<postcard::Error> for StorageError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Cursor {
     slab: usize,
     offset: usize,
@@ -50,7 +50,6 @@ pub trait IO {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Record<'a> {
     max_sequence: u64,
-    offset: usize,
     data: &'a [u8],
 }
 
@@ -70,7 +69,6 @@ impl<I> Storage<I> where I: IO {
     }
 
     fn read_record<'a>(&self, data: &'a [u8], offset: usize) -> Result<(Record<'a>, usize), StorageError> {
-        let at = offset;
         let (length, offset) = read_u32(data, offset)?;
 
         // BUG: what happens if usize is smaller then u32?
@@ -78,8 +76,6 @@ impl<I> Storage<I> where I: IO {
           .ok_or(StorageError::CorruptDB)?;
 
         let mut record: Record<'_> = from_bytes(&data[offset..end_offset])?;
-
-        record.offset = at;
 
         Ok((record, end_offset))
     }
@@ -108,12 +104,13 @@ impl<I> Storage<I> where I: IO {
             };
 
             let mut cursor = slab.get_head();
-
-            while let Some(record) = slab.read(&mut cursor)? {
+            let mut curosr_copy = cursor.clone();
+            while let Some((record, next)) = slab.read(cursor)? {
                 if record.max_sequence >= sequence {
-                    cursor.offset = record.offset;
-                    return Ok(Some(cursor));
+                    return Ok(Some(curosr_copy));
                 }
+                curosr_copy = next.clone();
+                cursor = next;
             }
 
             match index.checked_add(1) {
@@ -125,13 +122,14 @@ impl<I> Storage<I> where I: IO {
     }
 
     fn read<'a>(&'a self, mut cursor: Cursor) -> Result<Option<(&'a [u8], Cursor)>, StorageError> {
-        let slab = self.io.get_slab(cursor.slab)?;
+        let slab_index = cursor.slab;
+        let slab = self.io.get_slab(slab_index)?;
  
-        if let Some(record) = slab.read(& mut cursor)? {
-            return Ok(Some((record.data, cursor)));
+        if let Some((record, next)) = slab.read(cursor)? {
+            return Ok(Some((record.data, next)));
         }
 
-        let Some(next_index) = cursor.slab.checked_add(1) else {
+        let Some(next_index) = slab_index.checked_add(1) else {
             return Ok(None);
         };
 
@@ -143,8 +141,8 @@ impl<I> Storage<I> where I: IO {
         
         cursor = slab.get_head();
         
-        if let Some(record) = slab.read(& mut cursor)? {
-            return Ok(Some((record.data, cursor)));
+        if let Some((record, next)) = slab.read(cursor)? {
+            return Ok(Some((record.data, next)));
         }
 
         // This could only happen if there was an empty
