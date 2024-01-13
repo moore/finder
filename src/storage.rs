@@ -38,14 +38,20 @@ pub trait IO {
     fn truncate(&mut self) -> Result<(), StorageError>;
     fn slab_size(&self) -> usize;
     fn free_slabs(&self) -> Result<usize, StorageError>;
-    fn slab_count(&self) -> Result<usize, StorageError>; 
+    fn slab_count(&self) -> Result<usize, StorageError>;
     fn get_slab<'a>(&'a self, index: usize) -> Result<Slab<'a>, StorageError>;
-    fn new_writer<'a>(&'a mut self) -> Result<SlabWriter<'a, Self>, StorageError> where Self: Sized;
+    fn new_writer<'a>(&'a mut self) -> Result<SlabWriter<'a, Self>, StorageError>
+    where
+        Self: Sized;
     fn write_record(&mut self, offset: usize, record: &Record) -> Result<usize, StorageError>;
-    fn commit(&mut self, record_count: u32, max_sequence: u64, offset: usize) -> Result<(), StorageError>;
+    fn commit(
+        &mut self,
+        record_count: u32,
+        max_sequence: u64,
+        offset: usize,
+    ) -> Result<(), StorageError>;
     fn get_head(&self) -> Result<usize, StorageError>;
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Record<'a> {
@@ -53,54 +59,55 @@ pub struct Record<'a> {
     data: &'a [u8],
 }
 
-
-pub struct Storage<I> where I: IO {
+pub struct Storage<I>
+where
+    I: IO,
+{
     io: I,
 }
 
-impl<I> Storage<I> where I: IO {
+impl<I> Storage<I>
+where
+    I: IO,
+{
     const LENGTH_LENGTH: usize = 4;
     const SEQUENCE_LENGTH: usize = 8;
 
     pub fn new<'a>(io: I) -> Self {
-        Storage {
-            io,
-        }
+        Storage { io }
     }
 
-    fn read_record<'a>(&self, data: &'a [u8], offset: usize) -> Result<(Record<'a>, usize), StorageError> {
+    pub fn read_record<'a>(
+        &self,
+        data: &'a [u8],
+        offset: usize,
+    ) -> Result<(Record<'a>, usize), StorageError> {
         let (length, offset) = read_u32(data, offset)?;
 
         // BUG: what happens if usize is smaller then u32?
-        let end_offset = offset.checked_add(length as usize)
-          .ok_or(StorageError::CorruptDB)?;
+        let end_offset = offset
+            .checked_add(length as usize)
+            .ok_or(StorageError::CorruptDB)?;
 
         let mut record: Record<'_> = from_bytes(&data[offset..end_offset])?;
 
         Ok((record, end_offset))
     }
 
-
-}
-
-impl<I> Storage<I> where I: IO {
-
-    fn get_cursor_from(&self, sequence: u64) -> Result<Option<Cursor>, StorageError> {
+    pub fn get_cursor_from(&self, sequence: u64) -> Result<Option<Cursor>, StorageError> {
         let mut index = self.io.get_head()?;
 
         loop {
-            let slab = match self.io.get_slab(index)  {
+            let slab = match self.io.get_slab(index) {
                 Ok(slab) => slab,
-                Err(e) => {
-                    match e {
-                        StorageError::OutOfBounds => {
-                            return Ok(None);
-                        }
-                        _ => {
-                            return Err(e);
-                        }
+                Err(e) => match e {
+                    StorageError::OutOfBounds => {
+                        return Ok(None);
                     }
-                }
+                    _ => {
+                        return Err(e);
+                    }
+                },
             };
 
             let mut cursor = slab.get_head();
@@ -118,13 +125,15 @@ impl<I> Storage<I> where I: IO {
                 None => return Ok(None),
             }
         }
-
     }
 
-    fn read<'a>(&'a self, mut cursor: Cursor) -> Result<Option<(&'a [u8], Cursor)>, StorageError> {
+    pub fn read<'a>(
+        &'a self,
+        mut cursor: Cursor,
+    ) -> Result<Option<(&'a [u8], Cursor)>, StorageError> {
         let slab_index = cursor.slab;
         let slab = self.io.get_slab(slab_index)?;
- 
+
         if let Some((record, next)) = slab.read(cursor)? {
             return Ok(Some((record.data, next)));
         }
@@ -136,11 +145,11 @@ impl<I> Storage<I> where I: IO {
         if next_index >= self.io.slab_count()? {
             return Ok(None);
         }
-            
+
         let slab = self.io.get_slab(next_index)?;
-        
+
         cursor = slab.get_head();
-        
+
         if let Some((record, next)) = slab.read(cursor)? {
             return Ok(Some((record.data, next)));
         }
@@ -150,24 +159,12 @@ impl<I> Storage<I> where I: IO {
         Err(StorageError::Unreachable)
     }
 
-    fn write_slab(&mut self, records: &[Record]) -> Result<(), StorageError> {
-        let mut writer: SlabWriter<'_, I> = self.io.new_writer()?;
-
-        for record in records {
-            writer.write_record(&record)?;
-        }
-        writer.commit();
-
-        Ok(())
-    }
-
-    fn get_writer<'a>(&'a mut self) -> Result<SlabWriter<'a, I>, StorageError> {
+    pub fn get_writer<'a>(&'a mut self) -> Result<SlabWriter<'a, I>, StorageError> {
         self.io.new_writer()
     }
 }
 
-fn read_u32(data: &[u8], offset: usize) -> Result<(u32,usize), StorageError> {
-        
+fn read_u32(data: &[u8], offset: usize) -> Result<(u32, usize), StorageError> {
     let (len_arr, len_end) = read_arr(data, offset)?;
     let length = u32::from_be_bytes(len_arr);
 
@@ -175,15 +172,13 @@ fn read_u32(data: &[u8], offset: usize) -> Result<(u32,usize), StorageError> {
 }
 
 fn write_u32(value: u32, target: &mut [u8], mut offset: usize) -> Result<usize, StorageError> {
-        
     let data = value.to_be_bytes();
     offset = write_arr(data, target, offset)?;
 
     Ok(offset)
 }
 
-fn read_u64(data: &[u8], offset: usize) -> Result<(u64,usize), StorageError> {
-    
+fn read_u64(data: &[u8], offset: usize) -> Result<(u64, usize), StorageError> {
     let (len_arr, len_end) = read_arr(data, offset)?;
     let length = u64::from_be_bytes(len_arr);
 
@@ -191,20 +186,19 @@ fn read_u64(data: &[u8], offset: usize) -> Result<(u64,usize), StorageError> {
 }
 
 fn write_u64(value: u64, target: &mut [u8], mut offset: usize) -> Result<usize, StorageError> {
-        
     let data = value.to_be_bytes();
     offset = write_arr(data, target, offset)?;
 
     Ok(offset)
 }
 
-fn read_arr<const SIZE: usize>(data: &[u8],  offset: usize)
-    -> Result<([u8;SIZE], usize), StorageError> {
-    let end = offset.checked_add(SIZE)
-        .ok_or(StorageError::CorruptDB)?;
+fn read_arr<const SIZE: usize>(
+    data: &[u8],
+    offset: usize,
+) -> Result<([u8; SIZE], usize), StorageError> {
+    let end = offset.checked_add(SIZE).ok_or(StorageError::CorruptDB)?;
 
-    let slice = data.get(offset..end)
-        .ok_or(StorageError::OutOfBounds)?;
+    let slice = data.get(offset..end).ok_or(StorageError::OutOfBounds)?;
 
     let Ok(arr) = slice.try_into() else {
         return Err(StorageError::Unreachable);
@@ -212,14 +206,16 @@ fn read_arr<const SIZE: usize>(data: &[u8],  offset: usize)
     Ok((arr, end))
 }
 
-fn write_arr<const SIZE: usize>(data: [u8 ; SIZE], target: &mut [u8],  offset: usize)
-    -> Result<usize, StorageError> {
-    let end = offset.checked_add(SIZE)
-        .ok_or(StorageError::CorruptDB)?;
+fn write_arr<const SIZE: usize>(
+    data: [u8; SIZE],
+    target: &mut [u8],
+    offset: usize,
+) -> Result<usize, StorageError> {
+    let end = offset.checked_add(SIZE).ok_or(StorageError::CorruptDB)?;
 
-    let slice = target.get_mut(offset..end)
+    let slice = target
+        .get_mut(offset..end)
         .ok_or(StorageError::OutOfBounds)?;
-
 
     slice.copy_from_slice(data.as_slice());
 

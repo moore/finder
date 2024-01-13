@@ -1,10 +1,10 @@
 #![no_std]
 
-use core::{marker::PhantomData, ops::Deref};
-use heapless::{Vec, FnvIndexMap};
+use core::{marker::PhantomData, mem::size_of, ops::Deref};
+use heapless::{FnvIndexMap, Vec, String};
 
 use postcard::{from_bytes, to_slice};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 mod channel;
 use channel::*;
@@ -12,92 +12,154 @@ use channel::*;
 mod storage;
 use storage::*;
 
-pub trait Crypto {
-    fn envelope_id<T>(&self, sealed: &SealedEnvelope<T>) -> EnvelopeId;
+mod chat;
+use chat::*;
+
+mod crypto;
+use crypto::*;
+
+#[cfg(test)]
+mod test;
+
+#[derive(Debug)]
+enum ClientError {
+    SerializationError(postcard::Error),
+    ChannelError(ChannelError),
+    CryptoError(CryptoError),
+    ChatError(ChatError),
+    StorageError(StorageError),
+    ChannelLimit,
+    Unreachable,
+    StringTooLarge,
 }
 
-#[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct NodeId(u128);
-
-#[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct EnvelopeId(u128);
-
-#[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ChannelId(u128);
-
-#[derive(Debug, Serialize, Deserialize, Copy, Clone, Eq, PartialEq)]
-pub enum Recipient {
-    Node(NodeId),
-    Channel(ChannelId),
-}
-
-/// Each new message records the sender, recipient
-/// relative order.
-///
-/// The sender is specified in the `from` field and
-/// verified by checking the signature.
-///
-/// The recipient is specified in the `to` field as
-/// either a specific device (node), or a channel.
-///
-/// The order is defined over the `cause`, `sequence`,
-/// and `sender_last` fields. It is required that the
-/// `sequence` be no larger then one more then the
-/// largest sequence of the last envelope received
-/// from the sender in the `cause` field and
-/// must also be strictly greater than the `last_sender`
-/// field. The `last_sender` field must contain the `sequence`
-/// value of the last `Envelope` produced by the sending node.
-///
-/// The reason that we use the cause sequence and
-/// associated constraints is to prevent a sender
-/// setting a very large sequence and exhausting the sequence counter.
-///
-/// In the case that the sender knows of no existing messages sent
-/// to a recipient the cause field should `EnvelopeId(0)` which is
-/// virtual and has a implicit `sequence of 0;
-///
-/// When selecting a `cause` the sending node should choose the `Envelope`
-/// with the largest `sequence` value or the envelope in the case that there
-/// is a tie between two or more `Envelope`s for largest `sequence`.
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
-pub struct Envelope<T> {
-    from: NodeId,
-    to: Recipient,
-    cause: NodeId,
-    sender_last: u64,
-    sequence: u64,
-    data: T,
-}
-
-#[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
-pub struct SealedEnvelope<'a, T> {
-    serialized: &'a [u8],
-    signature: &'a [u8],
-    _phantom: PhantomData<T>,
-}
-
-impl<'a, T> SealedEnvelope<'a, T> {
-    pub fn id(&self, crypto: &impl Crypto) -> EnvelopeId {
-        crypto.envelope_id(self)
+impl From<postcard::Error> for ClientError {
+    fn from(value: postcard::Error) -> ClientError {
+        ClientError::SerializationError(value)
     }
 }
 
-
-pub struct Client<const MAX_CHANNELS: usize, const MAX_NODES: usize, const MAX_RECORDS: usize, T, I: IO> {
-    channels: FnvIndexMap<ChannelId, ChannelState<MAX_NODES>, MAX_CHANNELS>,
-    storage: FnvIndexMap<ChannelId, Storage<I>, MAX_CHANNELS>,
-    _phantom: PhantomData<T>,
+impl From<ChannelError> for ClientError {
+    fn from(value: ChannelError) -> Self {
+        ClientError::ChannelError(value)
+    }
 }
 
-impl<const MAX_CHANNELS: usize, const MAX_NODES: usize, const MAX_RECORDS: usize, T, I: IO>
-Client<MAX_CHANNELS, MAX_NODES, MAX_RECORDS, T, I> {
-    pub fn new() -> Self {
+impl From<CryptoError> for ClientError {
+    fn from(value: CryptoError) -> Self {
+        ClientError::CryptoError(value)
+    }
+}
+
+impl From<ChatError> for ClientError {
+    fn from(value: ChatError) -> Self {
+        ClientError::ChatError(value)
+    }
+}
+
+impl From<StorageError> for ClientError {
+    fn from(value: StorageError) -> Self {
+        ClientError::StorageError(value)
+    }
+}
+
+pub struct Client<
+    'a,
+    const MAX_CHANNELS: usize,
+    const MAX_NODES: usize,
+    const MAX_RECORDS: usize,
+    I: IO,
+    C: Crypto,
+> {
+    crypto: &'a mut C,
+    key_pair: KeyPair<C::PrivateSigningKey, C::PubSigningKey>,
+    channels: FnvIndexMap<ChannelId, ChannelState<MAX_NODES>, MAX_CHANNELS>,
+    storage: FnvIndexMap<ChannelId, Storage<I>, MAX_CHANNELS>,
+    chats: FnvIndexMap<ChannelId, Chat<MAX_NODES, C>, MAX_CHANNELS>,
+}
+
+impl<
+        'a,
+        const MAX_CHANNELS: usize,
+        const MAX_NODES: usize,
+        const MAX_RECORDS: usize,
+        I: IO,
+        C: Crypto,
+    > Client<'a, MAX_CHANNELS, MAX_NODES, MAX_RECORDS, I, C>
+{
+    pub fn new(
+        key_pair: KeyPair<C::PrivateSigningKey, C::PubSigningKey>,
+        crypto: &'a mut C,
+    ) -> Self {
         Self {
+            crypto,
+            key_pair,
             channels: FnvIndexMap::new(),
             storage: FnvIndexMap::new(),
-            _phantom: PhantomData::<T>,
+            chats: FnvIndexMap::new(),
         }
     }
 
+    pub fn init_chat(&mut self, name_str: &str, io: I) -> Result<ChannelId, ClientError> {
+        let nonce = self.crypto.nonce();
+
+        let Ok(name) = name_str.try_into() else {
+            return Err(ClientError::StringTooLarge)
+        };
+
+        let message = NewChannel {
+            nonce,
+            name,
+            owner: self.key_pair.public.clone(),
+        };
+
+        let mut target = [0; 4096]; // BUG: should we take this as an argument?
+
+        let serlized = to_slice(&message, target.as_mut_slice())?;
+        let channel_id = self.crypto.channel_id_from_bytes(serlized);
+        let my_id = C::compute_id(&self.key_pair.public);
+        let mut channel = ChannelState::<MAX_NODES>::new(my_id.clone())?;
+        let mut chat = Chat::<MAX_NODES, C>::new(channel_id.clone());
+        let mut storage = Storage::new(io);
+
+        let protocol = Protocol::NewChannel(message);
+
+        let to = Recipient::Channel(channel_id.clone());
+        let envelope = channel.address(my_id.clone(), to, protocol)?;
+
+        // -seal envelope
+        let sealed_envelope =
+            self.crypto
+                .seal::<_, 500, 32>(&self.key_pair, &envelope, &mut target)?;
+
+        let envlope_id = self.crypto.envelope_id(&sealed_envelope);
+        // -check that we can receive it
+        // BUG: This actually allocates a new client
+        // So there is a DOS here where and attacker
+        // can send junk messages and overflow memory.
+        channel.check_receive(&envelope, &envlope_id)?;
+        // -check the message on chat
+        chat.accept_message(channel_id.clone(), my_id.clone(), &envelope.data)?;
+        // -receive it
+        let max_sequance = channel.receive(&envelope, &envlope_id)?;
+        // -store it
+        let mut slab_writer = storage.get_writer()?;
+        let serlized_envlope = to_slice(&sealed_envelope, target.as_mut_slice())?;
+        slab_writer.write_record(max_sequance, &serlized_envlope)?;
+        slab_writer.commit()?;
+
+        let Ok(_) = self.channels.insert(channel_id.clone(), channel) else {
+            return Err(ClientError::ChannelLimit);
+        };
+
+        let Ok(_) = self.storage.insert(channel_id.clone(), storage) else {
+            return Err(ClientError::Unreachable);
+        };
+
+        let Ok(_) = self.chats.insert(channel_id.clone(), chat) else {
+            return Err(ClientError::Unreachable);
+        };
+
+        Ok(channel_id)
+    }
 }
