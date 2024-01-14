@@ -5,14 +5,12 @@ use rsa::pkcs1v15::{SigningKey, VerifyingKey, Signature};
 use rsa::pkcs8::{EncodePrivateKey, EncodePublicKey};
 use rsa::RsaPrivateKey;
 use rsa::RsaPublicKey;
-use rsa::signature::Keypair;
 use rsa::signature::Verifier;
 
 use hkdf::Hkdf;
 use rand_chacha::ChaCha20Rng;
 use rsa::sha2::{Digest, Sha256};
 use rsa::signature::{RandomizedSigner, SignatureEncoding};
-use rsa::traits::SignatureScheme;
 
 use rand::Rng;
 
@@ -166,7 +164,8 @@ impl Crypto for RustCrypto {
             unimplemented!()
         };
 
-        ChannelId::new(arr)    }
+        ChannelId::new(arr)
+    }
 }
 
 
