@@ -1,7 +1,8 @@
 use core::mem::size_of;
+use ascon_hash::{AsconXof, ExtendableOutput, Update, XofReader};
 
 use super::*;
-mod mem_io;
+pub mod mem_io;
 use mem_io::*;
 
 mod slab;
@@ -31,9 +32,6 @@ pub struct Cursor {
     offset: usize,
 }
 
-pub struct IoData<'a> {
-    data: &'a mut [u8],
-}
 pub trait IO {
     fn truncate(&mut self) -> Result<(), StorageError>;
     fn slab_size(&self) -> usize;
@@ -59,6 +57,71 @@ pub struct Record<'a> {
     data: &'a [u8],
 }
 
+/* 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DbInfo {
+    root1_offset: usize,
+    root2_offset: usize,
+    wal_offset: usize,
+    wall_length: usize,
+}
+
+
+const CHECKSUM_SIZE: usize = 4;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DbRoot {
+    generation: u64,
+    data_start: usize,
+    data_end: usize,
+    check_sum: [u8 ; CHECKSUM_SIZE],
+}
+
+impl DbRoot {
+    pub fn new(generation: u64, data_start: usize, data_end: usize) -> Self {
+        let mut check_sum = 
+            DbRoot::compute_checksum(generation, data_start, data_end);
+
+        Self {
+            generation,
+            data_start,
+            data_end,
+            check_sum,
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), StorageError> {
+        let computed = DbRoot::compute_checksum(
+            self.generation, 
+            self.data_start, 
+            self.data_end);
+
+        if computed != self.check_sum {
+            return Err(StorageError::CorruptDB);
+        }
+        Ok(())
+    }
+
+    fn compute_checksum(generation: u64, data_start: usize, data_end: usize) -> [u8; CHECKSUM_SIZE] {
+        let mut xof = AsconXof::default();
+        xof.update(&generation.to_be_bytes());
+        xof.update(&data_start.to_be_bytes());
+        xof.update(&data_end.to_be_bytes());
+        let mut reader = xof.finalize_xof();
+        let mut check_sum = [0u8; CHECKSUM_SIZE];
+        reader.read(&mut check_sum);
+        check_sum
+    }
+}
+
+/// Layout.
+/// [DbInfo, Padded to whole page]
+/// [Root 1, Padded to whole page]
+/// [WAL, Padded to whole page]
+/// [Root 2, Padded to whole page]
+/// [Records]
+*/
+
 pub struct Storage<I>
 where
     I: IO,
@@ -77,22 +140,6 @@ where
         Storage { io }
     }
 
-    pub fn read_record<'a>(
-        &self,
-        data: &'a [u8],
-        offset: usize,
-    ) -> Result<(Record<'a>, usize), StorageError> {
-        let (length, offset) = read_u32(data, offset)?;
-
-        // BUG: what happens if usize is smaller then u32?
-        let end_offset = offset
-            .checked_add(length as usize)
-            .ok_or(StorageError::CorruptDB)?;
-
-        let mut record: Record<'_> = from_bytes(&data[offset..end_offset])?;
-
-        Ok((record, end_offset))
-    }
 
     pub fn get_cursor_from(&self, sequence: u64) -> Result<Option<Cursor>, StorageError> {
         let mut index = self.io.get_head()?;

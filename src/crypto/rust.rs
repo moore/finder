@@ -14,7 +14,7 @@ use rsa::signature::{RandomizedSigner, SignatureEncoding};
 
 use rand::Rng;
 
-struct RustCrypto {
+pub struct RustCrypto {
     rng: ChaCha20Rng,
 }
 
@@ -81,7 +81,7 @@ impl Crypto for RustCrypto {
     fn seal<T: Serialize, const MAX_ENVELOPE: usize, const MAX_SIG: usize>(
         &self,
         key_pair: &KeyPair<Self::PrivateSigningKey, Self::PubSigningKey>,
-        envelope: &Envelope<T>,
+        envelope: &Message<T>,
         target: &mut [u8],
     ) -> Result<SealedEnvelope<T, MAX_ENVELOPE, MAX_SIG>, CryptoError> {
 
@@ -118,21 +118,21 @@ impl Crypto for RustCrypto {
     fn open<T: DeserializeOwned + Serialize, const MAX_ENVELOPE: usize, const MAX_SIG: usize>(
         &self,
         key: &Self::PubSigningKey,
-        envelope: &SealedEnvelope<T, MAX_ENVELOPE, MAX_SIG>,
-    ) -> Result<Envelope<T>, CryptoError> {
+        sealed_envelope: &SealedEnvelope<T, MAX_ENVELOPE, MAX_SIG>,
+    ) -> Result<Message<T>, CryptoError> {
 
         let mut hasher = Sha256::new();
-        hasher.update(&envelope.serialized);
+        hasher.update(&sealed_envelope.serialized);
         let envelope_hash = hasher.finalize();
    
         let verifying_key = VerifyingKey::<Sha256>::new(key.clone());
-        let Ok(signature) = Signature::try_from(envelope.signature.as_ref()) else {
+        let Ok(signature) = Signature::try_from(sealed_envelope.signature.as_ref()) else {
             return Err(CryptoError::InternalError);
         };
 
         verifying_key.verify(&envelope_hash, &signature)?;
 
-        let opened = from_bytes(&envelope.serialized)?;
+        let opened = from_bytes(&sealed_envelope.serialized)?;
         
         Ok(opened)
     }
@@ -170,4 +170,4 @@ impl Crypto for RustCrypto {
 
 
 #[cfg(test)]
-mod test;
+pub mod test;

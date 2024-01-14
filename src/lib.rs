@@ -63,11 +63,13 @@ impl From<StorageError> for ClientError {
     }
 }
 
+
+const MAX_SIG: usize = 256;
+const MAX_ENVELOPE: usize = 1024 - MAX_SIG; 
 pub struct Client<
     'a,
     const MAX_CHANNELS: usize,
     const MAX_NODES: usize,
-    const MAX_RECORDS: usize,
     I: IO,
     C: Crypto,
 > {
@@ -82,10 +84,9 @@ impl<
         'a,
         const MAX_CHANNELS: usize,
         const MAX_NODES: usize,
-        const MAX_RECORDS: usize,
         I: IO,
         C: Crypto,
-    > Client<'a, MAX_CHANNELS, MAX_NODES, MAX_RECORDS, I, C>
+    > Client<'a, MAX_CHANNELS, MAX_NODES, I, C>
 {
     pub fn new(
         key_pair: KeyPair<C::PrivateSigningKey, C::PubSigningKey>,
@@ -98,6 +99,27 @@ impl<
             storage: FnvIndexMap::new(),
             chats: FnvIndexMap::new(),
         }
+    }
+
+    pub fn open_chat(&mut self, channel_id: ChannelId, io: I) -> Result<(), ClientError> {
+        let my_id = C::compute_id(&self.key_pair.public);
+
+        let mut storage = Storage::new(io);
+        let mut channel = ChannelState::<MAX_NODES>::new(my_id)?;
+        let mut chat = Chat::<MAX_NODES, C>::new(channel_id.clone());
+
+        let start = storage.get_cursor_from(0)?;
+
+        if let Some(cursor) = start {
+            while let Some((data, cursor)) = storage.read(cursor.clone())? {
+                let sealed_envelope: SealedEnvelope<Protocol<C::PubSigningKey>, MAX_ENVELOPE, MAX_SIG> = from_bytes(data)?;
+                let envlope_id = self.crypto.envelope_id(&sealed_envelope);
+                //let envlope = self.crypto.open(key, &sealed_envelope)?;
+
+            }
+        }
+
+        Ok(())
     }
 
     pub fn init_chat(&mut self, name_str: &str, io: I) -> Result<ChannelId, ClientError> {
@@ -130,7 +152,7 @@ impl<
         // -seal envelope
         let sealed_envelope =
             self.crypto
-                .seal::<_, 500, 32>(&self.key_pair, &envelope, &mut target)?;
+                .seal::<_, MAX_ENVELOPE, MAX_SIG>(&self.key_pair, &envelope, &mut target)?;
 
         let envlope_id = self.crypto.envelope_id(&sealed_envelope);
         // -check that we can receive it

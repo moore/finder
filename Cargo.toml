@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+ascon-hash = { version = "0.2.0", features = []} 
 heapless = { version = "0.8.0", features = ["serde"] }
 hkdf = "0.12.4"
 postcard = { version = "1.0.0" }

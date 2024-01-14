@@ -32,7 +32,7 @@ BHm4I4zAJFmYCL/mBGIjhDI5q7YM7aHpQsDIIrx84vFbJqJfrJem
 -----END RSA PRIVATE KEY-----
 ";
 
-fn get_test_keys() -> KeyPair<RsaPrivateKey, RsaPublicKey> {
+pub fn get_test_keys() -> KeyPair<RsaPrivateKey, RsaPublicKey> {
     let private = RsaPrivateKey::from_pkcs1_pem(PRIVATE_KEY)
         .expect("error reading key");
     let public = private.to_public_key();

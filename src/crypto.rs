@@ -7,7 +7,7 @@ use rsa::RsaPublicKey;
 pub const SHA256_SIZE: usize = 32; //bytes
 pub const RSA_KEY_SIZE: usize = 256; //bytes
 
-mod rust;
+pub mod rust;
 
 #[derive(Debug, Hash, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Id {
@@ -123,22 +123,32 @@ pub trait Crypto {
     type PrivateSigningKey: Clone + Serialize + DeserializeOwned;
 
     fn compute_id(key: &Self::PubSigningKey) -> NodeId;
+
+    fn get_id<T: Serialize + for<'a> Deserialize<'a>, const MAX_ENVELOPE: usize, const MAX_SIG: usize>(sealed_envlope: &SealedEnvelope<T, MAX_ENVELOPE, MAX_SIG>) -> NodeId {
+        unimplemented!()
+    }
+
     fn envelope_id<T, const MAX_ENVELOPE: usize, const MAX_SIG: usize>(
         &self,
         sealed: &SealedEnvelope<T, MAX_ENVELOPE, MAX_SIG>,
     ) -> EnvelopeId;
+
     fn seal<T: Serialize + for<'a> Deserialize<'a>, const MAX_ENVELOPE: usize, const MAX_SIG: usize>(
         &self,
         key_pair: &KeyPair<Self::PrivateSigningKey, Self::PubSigningKey>,
-        envelope: &Envelope<T>,
+        envelope: &Message<T>,
         target: &mut [u8],
     ) -> Result<SealedEnvelope<T, MAX_ENVELOPE, MAX_SIG>, CryptoError>;
+
     fn open<T: Serialize + DeserializeOwned, const MAX_ENVELOPE: usize, const MAX_SIG: usize>(
         &self,
         key: &Self::PubSigningKey,
-        envelope: &SealedEnvelope<T, MAX_ENVELOPE, MAX_SIG>,
-    ) -> Result<Envelope<T>, CryptoError>;
+        sealed_envelope: &SealedEnvelope<T, MAX_ENVELOPE, MAX_SIG>,
+    ) -> Result<Message<T>, CryptoError>;
+
     fn nonce(&mut self) -> u128;
+
     fn make_signing_keys(&mut self) -> Result<KeyPair<Self::PrivateSigningKey, Self::PubSigningKey>, CryptoError>;
+
     fn channel_id_from_bytes(&self, data: &[u8]) -> ChannelId;
 }

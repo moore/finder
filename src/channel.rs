@@ -36,7 +36,7 @@ pub enum Recipient {
 /// with the largest `sequence` value or the envelope in the case that there
 /// is a tie between two or more `Envelope`s for largest `sequence`.
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
-pub struct Envelope<T> {
+pub struct Message<T> {
     from: NodeId,
     to: Recipient,
     cause: NodeId,
@@ -92,7 +92,7 @@ impl<const MAX_NODES: usize> ChannelState<MAX_NODES> {
 
     pub fn receive<T: Serialize>(
         &mut self,
-        envelope: &Envelope<T>,
+        envelope: &Message<T>,
         id: &EnvelopeId,
     ) -> Result<u64, ChannelError> {
         let index = self.check_receive_worker(envelope, id)?;
@@ -122,7 +122,7 @@ impl<const MAX_NODES: usize> ChannelState<MAX_NODES> {
 
     pub fn check_receive<T: Serialize>(
         &mut self,
-        envelope: &Envelope<T>,
+        envelope: &Message<T>,
         id: &EnvelopeId,
     ) -> Result<(), ChannelError> {
         self.check_receive_worker(envelope, id)?;
@@ -131,7 +131,7 @@ impl<const MAX_NODES: usize> ChannelState<MAX_NODES> {
 
     fn check_receive_worker<T: Serialize>(
         &mut self,
-        envelope: &Envelope<T>,
+        envelope: &Message<T>,
         id: &EnvelopeId,
     ) -> Result<usize, ChannelError> {
         let from = envelope.from;
@@ -205,7 +205,7 @@ impl<const MAX_NODES: usize> ChannelState<MAX_NODES> {
         from: NodeId,
         to: Recipient,
         data: T,
-    ) -> Result<Envelope<T>, ChannelError> {
+    ) -> Result<Message<T>, ChannelError> {
         let pos = self.nodes.binary_search_by_key(&from, |&ns| ns.node);
 
         let record = match pos {
@@ -237,7 +237,7 @@ impl<const MAX_NODES: usize> ChannelState<MAX_NODES> {
             return Err(ChannelError::SequenceOverFlow);
         };
 
-        let result = Envelope {
+        let result = Message {
             from,
             to,
             cause: current.node,
