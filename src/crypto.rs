@@ -113,9 +113,15 @@ impl<T, const MAX_ENVELOPE: usize, const MAX_SIG: usize> SealedEnvelope<T, MAX_E
             _phantom: PhantomData::<T>,
         })
     }
+
     pub fn id(&self, crypto: &impl Crypto) -> EnvelopeId {
         crypto.envelope_id(self)
     }
+
+    pub fn from(&self) -> NodeId {
+        self.from
+    }
+
 }
 
 #[derive(Debug)]

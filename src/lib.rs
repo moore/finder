@@ -1,4 +1,4 @@
-#![no_std]
+//#![no_std]
 
 use core::{marker::PhantomData, mem::size_of, ops::Deref};
 use heapless::{FnvIndexMap, Vec, String};
@@ -105,19 +105,44 @@ impl<
         let my_id = C::compute_id(&self.key_pair.public);
 
         let mut storage = Storage::new(io);
-        let mut channel = ChannelState::<MAX_NODES, C::PubSigningKey>::new(my_id, self.key_pair.public.clone())?;
+        let mut channel
+            = ChannelState::<MAX_NODES, C::PubSigningKey>::new(
+                my_id, 
+                self.key_pair.public.clone())?;
+
         let mut chat = Chat::<MAX_NODES, C>::new(channel_id.clone());
 
         let start = storage.get_cursor_from(0)?;
 
-        if let Some(cursor) = start {
-            while let Some((data, cursor)) = storage.read(cursor.clone())? {
+        if let Some(mut cursor) = start {
+            while let Some(found) = storage.read(cursor)? {
+                let data;
+                (data, cursor) = found;
                 let sealed_envelope: SealedEnvelope<Protocol<C::PubSigningKey>, MAX_ENVELOPE, MAX_SIG> = from_bytes(data)?;
                 let envlope_id = self.crypto.envelope_id(&sealed_envelope);
-                //let envlope = self.crypto.open(key, &sealed_envelope)?;
-
+                let from = sealed_envelope.from();
+                let pub_key = channel.get_node_key(from)?;
+                let message = self.crypto.open(&pub_key, &sealed_envelope)?;
+                channel.check_receive(from, &message, &envlope_id)?;
+                let maby_key = chat.accept_message(channel_id, from, &message.data)?;
+                if let Some(new_pub_key) = maby_key {
+                    let node_id = C::compute_id(&new_pub_key);
+                    channel.add_node(node_id, new_pub_key)?;
+                }
             }
         }
+
+        let Ok(_) = self.channels.insert(channel_id.clone(), channel) else {
+            return Err(ClientError::ChannelLimit);
+        };
+
+        let Ok(_) = self.storage.insert(channel_id.clone(), storage) else {
+            return Err(ClientError::Unreachable);
+        };
+
+        let Ok(_) = self.chats.insert(channel_id.clone(), chat) else {
+            return Err(ClientError::Unreachable);
+        };
 
         Ok(())
     }
