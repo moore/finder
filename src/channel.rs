@@ -53,7 +53,8 @@ pub struct Message<T> {
 }
 
 #[derive(Debug, Copy, Clone)]
-struct NodeSequence {
+struct NodeSequence<P> {
+    public_key: P,
     node: NodeId,
     id: EnvelopeId,
     sequence: u64,
@@ -69,19 +70,22 @@ pub enum ChannelError {
     },
     SequenceOverFlow,
     Unreachable,
+    NodeExists,
+    UnknownNode
 }
 
 #[derive(Debug)]
-pub struct ChannelState<const MAX_NODES: usize> {
-    nodes: Vec<NodeSequence, { MAX_NODES }>,
+pub struct ChannelState<const MAX_NODES: usize, P> {
+    nodes: Vec<NodeSequence<P>, { MAX_NODES }>,
     newest: NodeId,
 }
 
-impl<const MAX_NODES: usize> ChannelState<MAX_NODES> {
-    pub fn new(initial: NodeId) -> Result<Self, ChannelError> {
+impl<const MAX_NODES: usize, P: Clone> ChannelState<MAX_NODES, P> {
+    pub fn new(initial: NodeId, node_key: P) -> Result<Self, ChannelError> {
         let mut nodes = Vec::new();
 
         let initial_record = NodeSequence {
+            public_key: node_key,
             node: initial,
             id: EnvelopeId::new(0),
             sequence: 0,
@@ -95,6 +99,48 @@ impl<const MAX_NODES: usize> ChannelState<MAX_NODES> {
             nodes,
             newest: initial,
         })
+    }
+
+    pub fn add_node(&mut self, node: NodeId, node_key: P) -> Result<(), ChannelError> {
+
+        let pos = self.nodes.binary_search_by_key(&node, |ns| ns.node);
+
+        match pos {
+            Ok(index) => {
+                return Err(ChannelError::NodeExists)
+            }
+
+            Err(index) => {
+                let record = NodeSequence {
+                    public_key: node_key,
+                    node: node,
+                    id: EnvelopeId::new(0),
+                    sequence: 0,
+                };
+
+                if let Err(_) = self.nodes.insert(index, record) {
+                    return Err(ChannelError::ClientMax(MAX_NODES));
+                };
+            }
+        };
+
+        Ok(())
+    }
+
+    pub fn get_node_key(&self, node: NodeId) -> Result<P, ChannelError> {
+        let pos = self.nodes.binary_search_by_key(&node, |ns| ns.node);
+
+        match pos {
+            Ok(index) => {
+                let record = self.nodes.get(index)
+                    .ok_or(ChannelError::Unreachable)?;
+                Ok(record.public_key.clone())
+            }
+
+            Err(index) => {
+                Err(ChannelError::UnknownNode)
+            }
+        }
     }
 
     pub fn receive<T: Serialize>(
@@ -144,27 +190,12 @@ impl<const MAX_NODES: usize> ChannelState<MAX_NODES> {
         message: &Message<T>,
         id: &EnvelopeId,
     ) -> Result<usize, ChannelError> {
-        let pos = self.nodes.binary_search_by_key(&from, |&ns| ns.node);
+        let pos = self.nodes.binary_search_by_key(&from, |ns| ns.node);
 
         let index = match pos {
-            Ok(index) => {
-                self.nodes.get(index).ok_or(ChannelError::Unreachable)?;
-
-                index
-            }
-
+            Ok(index) => index,
             Err(index) => {
-                let record = NodeSequence {
-                    node: from.clone(),
-                    id: id.clone(),
-                    sequence: message.sequence,
-                };
-
-                if let Err(_) = self.nodes.insert(index, record) {
-                    return Err(ChannelError::ClientMax(MAX_NODES));
-                };
-
-                index
+                return Err(ChannelError::UnknownNode);
             }
         };
 
@@ -181,7 +212,7 @@ impl<const MAX_NODES: usize> ChannelState<MAX_NODES> {
 
         let cause_pos = self
             .nodes
-            .binary_search_by_key(&message.cause, |&ns| ns.node);
+            .binary_search_by_key(&message.cause, |ns| ns.node);
         let cause_target = message.sequence.saturating_sub(1);
 
         match cause_pos {
@@ -214,23 +245,13 @@ impl<const MAX_NODES: usize> ChannelState<MAX_NODES> {
         from: NodeId,
         data: T,
     ) -> Result<Message<T>, ChannelError> {
-        let pos = self.nodes.binary_search_by_key(&from, |&ns| ns.node);
+        let pos = self.nodes.binary_search_by_key(&from, |ns| ns.node);
 
         let record = match pos {
             Ok(index) => &self.nodes[index],
 
             Err(index) => {
-                let record = NodeSequence {
-                    node: from,
-                    id: EnvelopeId::new(0),
-                    sequence: 0,
-                };
-
-                if let Err(_) = self.nodes.insert(index, record) {
-                    return Err(ChannelError::ClientMax(MAX_NODES));
-                };
-
-                &self.nodes.get(index).ok_or(ChannelError::Unreachable)?
+              return Err(ChannelError::UnknownNode)
             }
         };
 
@@ -255,9 +276,9 @@ impl<const MAX_NODES: usize> ChannelState<MAX_NODES> {
         Ok(result)
     }
 
-    fn get_current<'a>(&'a self) -> Result<&'a NodeSequence, ChannelError> {
+    fn get_current<'a>(&'a self) -> Result<&'a NodeSequence<P>, ChannelError> {
         let id = &self.newest;
-        let Ok(pos) = self.nodes.binary_search_by_key(id, |&ns| ns.node) else {
+        let Ok(pos) = self.nodes.binary_search_by_key(id, |ns| ns.node) else {
             return Err(ChannelError::Unreachable);
         };
 

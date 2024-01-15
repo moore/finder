@@ -75,7 +75,7 @@ pub struct Client<
 > {
     crypto: &'a mut C,
     key_pair: KeyPair<C::PrivateSigningKey, C::PubSigningKey>,
-    channels: FnvIndexMap<ChannelId, ChannelState<MAX_NODES>, MAX_CHANNELS>,
+    channels: FnvIndexMap<ChannelId, ChannelState<MAX_NODES, C::PubSigningKey>, MAX_CHANNELS>,
     storage: FnvIndexMap<ChannelId, Storage<I>, MAX_CHANNELS>,
     chats: FnvIndexMap<ChannelId, Chat<MAX_NODES, C>, MAX_CHANNELS>,
 }
@@ -105,7 +105,7 @@ impl<
         let my_id = C::compute_id(&self.key_pair.public);
 
         let mut storage = Storage::new(io);
-        let mut channel = ChannelState::<MAX_NODES>::new(my_id)?;
+        let mut channel = ChannelState::<MAX_NODES, C::PubSigningKey>::new(my_id, self.key_pair.public.clone())?;
         let mut chat = Chat::<MAX_NODES, C>::new(channel_id.clone());
 
         let start = storage.get_cursor_from(0)?;
@@ -140,7 +140,7 @@ impl<
         let serlized = to_slice(&message, target.as_mut_slice())?;
         let channel_id = self.crypto.channel_id_from_bytes(serlized);
         let my_id = C::compute_id(&self.key_pair.public);
-        let mut channel = ChannelState::<MAX_NODES>::new(my_id.clone())?;
+        let mut channel = ChannelState::<MAX_NODES, C::PubSigningKey>::new(my_id, self.key_pair.public.clone())?;
         let mut chat = Chat::<MAX_NODES, C>::new(channel_id.clone());
         let mut storage = Storage::new(io);
 
@@ -159,7 +159,7 @@ impl<
         // BUG: This actually allocates a new client
         // So there is a DOS here where and attacker
         // can send junk messages and overflow memory.
-        channel.check_receive(my_id,&message, &envlope_id)?;
+        channel.check_receive(my_id, &message, &envlope_id)?;
         // -check the message on chat
         chat.accept_message(channel_id.clone(), my_id, &message.data)?;
         // -receive it

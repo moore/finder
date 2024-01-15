@@ -67,7 +67,7 @@ fn test_sign_verify() -> Result<(), ClientError> {
     let node2 = NodeId::new(2);
     let to = Recipient::Node(node2);
 
-    let mut state: ChannelState<3> = ChannelState::new(node1)?;
+    let mut state: ChannelState<3,RsaPublicKey> = ChannelState::new(node1, key_pair.public.clone())?;
 
     let envelope = state.address(node1, 0)?;
 
@@ -91,7 +91,7 @@ fn test_envlope_id() -> Result<(), ClientError> {
     let node2 = NodeId::new(2);
     let to = Recipient::Node(node2);
 
-    let mut state: ChannelState<3> = ChannelState::new(node1)?;
+    let mut state: ChannelState<3,RsaPublicKey> = ChannelState::new(node1, key_pair.public.clone())?;
 
     let envelope = state.address(node1, 0)?;
 
@@ -102,6 +102,8 @@ fn test_envlope_id() -> Result<(), ClientError> {
     let envlope_id2 = crypto.envelope_id(&sealed_envelope);
 
     assert_eq!(envlope_id1, envlope_id2);
+
+    state.add_node(node2, key_pair.public.clone());
 
     let envelope2 = state.address(node2, 0)?;
     let sealed_envelope2: SealedEnvelope<i32, 1025, SIG_SIZE>= crypto.seal(node2, to, &key_pair, &envelope2, &mut target)?;
