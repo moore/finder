@@ -1,4 +1,4 @@
-//#![no_std]
+#![no_std]
 
 use core::{marker::PhantomData, mem::size_of, ops::Deref};
 use heapless::{FnvIndexMap, Vec, String};
@@ -99,6 +99,10 @@ impl<
             storage: FnvIndexMap::new(),
             chats: FnvIndexMap::new(),
         }
+    }
+
+    pub fn send_message(&mut self, test: &str) -> Result<(), ClientError> {
+        unimplemented!()
     }
 
     pub fn open_chat(&mut self, channel_id: ChannelId, io: I) -> Result<(), ClientError> {
