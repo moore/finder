@@ -14,6 +14,12 @@ pub struct Id {
     pub data: [u8; SHA256_SIZE],
 }
 
+impl Id {
+    fn to_be_bytes(&self) -> [u8 ; SHA256_SIZE] {
+        self.data.clone()
+    }
+}
+
 impl From<u8> for Id {
     fn from(value: u8) -> Self {
         Self {
@@ -38,6 +44,10 @@ impl NodeId {
     {
         Self(value.into())
     }
+
+    pub fn to_be_bytes(&self) -> [u8 ; SHA256_SIZE] {
+        self.0.to_be_bytes()
+    }
 }
 
 #[derive(Debug, Hash, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -49,6 +59,10 @@ impl EnvelopeId {
         T: Into<Id>,
     {
         Self(value.into())
+    }
+
+    pub fn to_be_bytes(&self) -> [u8 ; SHA256_SIZE] {
+        self.0.to_be_bytes()
     }
 }
 
@@ -62,6 +76,10 @@ impl ChannelId {
     {
         Self(value.into())
     }
+
+    pub fn to_be_bytes(&self) -> [u8 ; SHA256_SIZE] {
+        self.0.to_be_bytes()
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -72,13 +90,15 @@ pub struct KeyPair<S, P> {
 
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct SealedEnvelope<T, const MAX_ENVELOPE: usize, const MAX_SIG: usize> {
+    pub from: NodeId,
+    pub to: Recipient,
     pub serialized: Vec<u8, MAX_ENVELOPE>,
     pub signature: Vec<u8, MAX_SIG>,
     _phantom: PhantomData<T>,
 }
 
 impl<T, const MAX_ENVELOPE: usize, const MAX_SIG: usize> SealedEnvelope<T, MAX_ENVELOPE, MAX_SIG> {
-    pub fn new(serialized: &[u8], signature: &[u8]) -> Result<Self, CryptoError> {
+    pub fn new(from: NodeId, to: Recipient, serialized: &[u8], signature: &[u8]) -> Result<Self, CryptoError> {
         let Ok(data_vec) = Vec::from_slice(serialized) else {
             return Err(CryptoError::MaxEnvelope);
         };
@@ -86,6 +106,8 @@ impl<T, const MAX_ENVELOPE: usize, const MAX_SIG: usize> SealedEnvelope<T, MAX_E
             return Err(CryptoError::MaxSig);
         };
         Ok(Self {
+            from,
+            to,
             serialized: data_vec,
             signature: sig_vec,
             _phantom: PhantomData::<T>,
@@ -135,6 +157,8 @@ pub trait Crypto {
 
     fn seal<T: Serialize + for<'a> Deserialize<'a>, const MAX_ENVELOPE: usize, const MAX_SIG: usize>(
         &self,
+        from: NodeId,
+        to: Recipient,
         key_pair: &KeyPair<Self::PrivateSigningKey, Self::PubSigningKey>,
         envelope: &Message<T>,
         target: &mut [u8],

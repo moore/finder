@@ -69,6 +69,8 @@ impl Crypto for RustCrypto {
         sealed: &SealedEnvelope<T, MAX_ENVELOPE, MAX_SIG>,
     ) -> EnvelopeId {
         let mut hasher = Sha256::new();
+        hasher.update(sealed.from.to_be_bytes());
+        hasher.update(sealed.to.to_be_bytes());
         hasher.update(&sealed.serialized);
         hasher.update(&sealed.signature);
         let result = hasher.finalize();
@@ -80,16 +82,20 @@ impl Crypto for RustCrypto {
 
     fn seal<T: Serialize, const MAX_ENVELOPE: usize, const MAX_SIG: usize>(
         &self,
+        from: NodeId,
+        to: Recipient,
         key_pair: &KeyPair<Self::PrivateSigningKey, Self::PubSigningKey>,
-        envelope: &Message<T>,
+        message: &Message<T>,
         target: &mut [u8],
     ) -> Result<SealedEnvelope<T, MAX_ENVELOPE, MAX_SIG>, CryptoError> {
 
-        let serialized = to_slice(envelope, target)?;
+        let serialized = to_slice(message, target)?;
         let mut hasher = Sha256::new();
+        hasher.update(&from.to_be_bytes());
+        hasher.update(&to.to_be_bytes());
         hasher.update(&serialized);
         let result = hasher.finalize();
-        let Ok(envelope_hash): Result<[u8; 32], _> = result.try_into() else {
+        let Ok(message_hash): Result<[u8; 32], _> = result.try_into() else {
             unimplemented!()
         };
 
@@ -98,7 +104,7 @@ impl Crypto for RustCrypto {
         // BUG: we should make a salt for this use
         let hk = Hkdf::<Sha256>::new(None, encoded.as_bytes());
         let mut seed = [0u8; 32];
-        if hk.expand(&envelope_hash, &mut seed).is_err() {
+        if hk.expand(&message_hash, &mut seed).is_err() {
             return Err(CryptoError::Unreachable);
         }
 
@@ -106,11 +112,11 @@ impl Crypto for RustCrypto {
         let mut rng = ChaCha20Rng::from_seed(seed);
 
         let signing_key = SigningKey::<Sha256>::new(key_pair.private.clone());
-        let signature = signing_key.sign_with_rng(&mut rng, &envelope_hash);
+        let signature = signing_key.sign_with_rng(&mut rng, &message_hash);
 
         let sig_bytes = signature.to_bytes();
         let sig_ref = sig_bytes.as_ref();
-        let result = SealedEnvelope::new(serialized, sig_ref)?;
+        let result = SealedEnvelope::new(from, to, serialized, sig_ref)?;
 
         Ok(result)
     }
@@ -122,6 +128,8 @@ impl Crypto for RustCrypto {
     ) -> Result<Message<T>, CryptoError> {
 
         let mut hasher = Sha256::new();
+        hasher.update(&sealed_envelope.from.to_be_bytes());
+        hasher.update(&sealed_envelope.to.to_be_bytes());
         hasher.update(&sealed_envelope.serialized);
         let envelope_hash = hasher.finalize();
    

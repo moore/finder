@@ -69,10 +69,10 @@ fn test_sign_verify() -> Result<(), ClientError> {
 
     let mut state: ChannelState<3> = ChannelState::new(node1)?;
 
-    let envelope = state.address(node1, to, 0)?;
+    let envelope = state.address(node1, 0)?;
 
     let mut target = [0u8 ; 4000];
-    let sealed_envelope: SealedEnvelope<i32, 1025, SIG_SIZE>= crypto.seal(&key_pair, &envelope, &mut target)?;
+    let sealed_envelope: SealedEnvelope<i32, 1025, SIG_SIZE>= crypto.seal(node1, to, &key_pair, &envelope, &mut target)?;
 
     let opened = crypto.open(&key_pair.public, &sealed_envelope)?;
 
@@ -93,25 +93,22 @@ fn test_envlope_id() -> Result<(), ClientError> {
 
     let mut state: ChannelState<3> = ChannelState::new(node1)?;
 
-    let envelope = state.address(node1, to, 0)?;
+    let envelope = state.address(node1, 0)?;
 
     let mut target = [0u8 ; 4000];
-    let sealed_envelope: SealedEnvelope<i32, 1025, SIG_SIZE>= crypto.seal(&key_pair, &envelope, &mut target)?;
+    let sealed_envelope: SealedEnvelope<i32, 1025, SIG_SIZE>= crypto.seal(node1, to, &key_pair, &envelope, &mut target)?;
 
     let envlope_id1 = crypto.envelope_id(&sealed_envelope);
     let envlope_id2 = crypto.envelope_id(&sealed_envelope);
 
     assert_eq!(envlope_id1, envlope_id2);
 
-    let envelope2 = state.address(node2, to, 0)?;
-    let sealed_envelope2: SealedEnvelope<i32, 1025, SIG_SIZE>= crypto.seal(&key_pair, &envelope2, &mut target)?;
+    let envelope2 = state.address(node2, 0)?;
+    let sealed_envelope2: SealedEnvelope<i32, 1025, SIG_SIZE>= crypto.seal(node2, to, &key_pair, &envelope2, &mut target)?;
 
     let envlope_id3 = crypto.envelope_id(&sealed_envelope2);
 
     assert_ne!(envlope_id1, envlope_id3);
-
-    let mut target = [0u8 ; 4000];
-    let sealed_envelope: SealedEnvelope<i32, 1025, SIG_SIZE>= crypto.seal(&key_pair, &envelope, &mut target)?;
 
 
     Ok(())

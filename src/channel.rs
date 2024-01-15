@@ -6,6 +6,15 @@ pub enum Recipient {
     Channel(ChannelId),
 }
 
+impl Recipient {
+    pub fn to_be_bytes(&self) -> [u8 ; SHA256_SIZE] {
+        match self {
+            Recipient::Node(node_id) => node_id.to_be_bytes(),
+            Recipient::Channel(channel_id) => channel_id.to_be_bytes(),
+        }
+    }
+}
+
 /// Each new message records the sender, recipient
 /// relative order.
 ///
@@ -37,8 +46,6 @@ pub enum Recipient {
 /// is a tie between two or more `Envelope`s for largest `sequence`.
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct Message<T> {
-    from: NodeId,
-    to: Recipient,
     cause: NodeId,
     sender_last: u64,
     sequence: u64,
@@ -92,23 +99,24 @@ impl<const MAX_NODES: usize> ChannelState<MAX_NODES> {
 
     pub fn receive<T: Serialize>(
         &mut self,
-        envelope: &Message<T>,
+        from: NodeId,
+        message: &Message<T>,
         id: &EnvelopeId,
     ) -> Result<u64, ChannelError> {
-        let index = self.check_receive_worker(envelope, id)?;
+        let index = self.check_receive_worker(from, message, id)?;
 
         let current = self.get_current()?;
 
         // Updated newest if needed.
-        if current.sequence < envelope.sequence
-            || (current.sequence == envelope.sequence && current.id < *id)
+        if current.sequence < message.sequence
+            || (current.sequence == message.sequence && current.id < *id)
         {
-            self.newest = envelope.from;
+            self.newest = from;
         }
 
         let record_mut = self.nodes.get_mut(index).ok_or(ChannelError::Unreachable)?;
 
-        record_mut.sequence = envelope.sequence;
+        record_mut.sequence = message.sequence;
         record_mut.id = *id;
 
         let min_record = self
@@ -122,19 +130,20 @@ impl<const MAX_NODES: usize> ChannelState<MAX_NODES> {
 
     pub fn check_receive<T: Serialize>(
         &mut self,
+        from: NodeId,
         envelope: &Message<T>,
         id: &EnvelopeId,
     ) -> Result<(), ChannelError> {
-        self.check_receive_worker(envelope, id)?;
+        self.check_receive_worker(from, envelope, id)?;
         Ok(())
     }
 
     fn check_receive_worker<T: Serialize>(
         &mut self,
-        envelope: &Message<T>,
+        from: NodeId,
+        message: &Message<T>,
         id: &EnvelopeId,
     ) -> Result<usize, ChannelError> {
-        let from = envelope.from;
         let pos = self.nodes.binary_search_by_key(&from, |&ns| ns.node);
 
         let index = match pos {
@@ -146,9 +155,9 @@ impl<const MAX_NODES: usize> ChannelState<MAX_NODES> {
 
             Err(index) => {
                 let record = NodeSequence {
-                    node: from,
+                    node: from.clone(),
                     id: id.clone(),
-                    sequence: envelope.sequence,
+                    sequence: message.sequence,
                 };
 
                 if let Err(_) = self.nodes.insert(index, record) {
@@ -162,18 +171,18 @@ impl<const MAX_NODES: usize> ChannelState<MAX_NODES> {
         let record = self.nodes.get(index).ok_or(ChannelError::Unreachable)?;
 
         // check that the sequence last matches
-        if record.sequence != envelope.sender_last {
+        if record.sequence != message.sender_last {
             return Err(ChannelError::MissingFromSender {
-                node: envelope.from,
+                node: from,
                 have: record.sequence,
-                missing: envelope.sender_last,
+                missing: message.sender_last,
             });
         }
 
         let cause_pos = self
             .nodes
-            .binary_search_by_key(&envelope.cause, |&ns| ns.node);
-        let cause_target = envelope.sequence.saturating_sub(1);
+            .binary_search_by_key(&message.cause, |&ns| ns.node);
+        let cause_target = message.sequence.saturating_sub(1);
 
         match cause_pos {
             Ok(index) => {
@@ -189,7 +198,7 @@ impl<const MAX_NODES: usize> ChannelState<MAX_NODES> {
             Err(_) => {
                 if cause_target != 0 {
                     return Err(ChannelError::MissingFromSender {
-                        node: envelope.cause,
+                        node: message.cause,
                         have: 0,
                         missing: cause_target,
                     });
@@ -203,7 +212,6 @@ impl<const MAX_NODES: usize> ChannelState<MAX_NODES> {
     pub fn address<T: Serialize>(
         &mut self,
         from: NodeId,
-        to: Recipient,
         data: T,
     ) -> Result<Message<T>, ChannelError> {
         let pos = self.nodes.binary_search_by_key(&from, |&ns| ns.node);
@@ -238,8 +246,6 @@ impl<const MAX_NODES: usize> ChannelState<MAX_NODES> {
         };
 
         let result = Message {
-            from,
-            to,
             cause: current.node,
             sender_last: record.sequence,
             sequence,

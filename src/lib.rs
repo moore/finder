@@ -147,23 +147,23 @@ impl<
         let protocol = Protocol::NewChannel(message);
 
         let to = Recipient::Channel(channel_id.clone());
-        let envelope = channel.address(my_id.clone(), to, protocol)?;
+        let message = channel.address(my_id, protocol)?;
 
         // -seal envelope
         let sealed_envelope =
             self.crypto
-                .seal::<_, MAX_ENVELOPE, MAX_SIG>(&self.key_pair, &envelope, &mut target)?;
+                .seal::<_, MAX_ENVELOPE, MAX_SIG>(my_id, to, &self.key_pair, &message, &mut target)?;
 
         let envlope_id = self.crypto.envelope_id(&sealed_envelope);
         // -check that we can receive it
         // BUG: This actually allocates a new client
         // So there is a DOS here where and attacker
         // can send junk messages and overflow memory.
-        channel.check_receive(&envelope, &envlope_id)?;
+        channel.check_receive(my_id,&message, &envlope_id)?;
         // -check the message on chat
-        chat.accept_message(channel_id.clone(), my_id.clone(), &envelope.data)?;
+        chat.accept_message(channel_id.clone(), my_id, &message.data)?;
         // -receive it
-        let max_sequance = channel.receive(&envelope, &envlope_id)?;
+        let max_sequance = channel.receive(my_id, &message, &envlope_id)?;
         // -store it
         let mut slab_writer = storage.get_writer()?;
         let serlized_envlope = to_slice(&sealed_envelope, target.as_mut_slice())?;
