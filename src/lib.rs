@@ -63,6 +63,16 @@ impl From<StorageError> for ClientError {
     }
 }
 
+struct Channel<
+const MAX_NODES: usize,
+I: IO,
+C: Crypto,
+> {
+    id: ChannelId,
+    channel: ChannelState<MAX_NODES, C::PubSigningKey>,
+    storage: Storage<I>,
+    chat: Chat<MAX_NODES, C>,
+}
 
 const MAX_SIG: usize = 256;
 const MAX_ENVELOPE: usize = 1024 - MAX_SIG; 
@@ -75,9 +85,7 @@ pub struct Client<
 > {
     crypto: &'a mut C,
     key_pair: KeyPair<C::PrivateSigningKey, C::PubSigningKey>,
-    channels: FnvIndexMap<ChannelId, ChannelState<MAX_NODES, C::PubSigningKey>, MAX_CHANNELS>,
-    storage: FnvIndexMap<ChannelId, Storage<I>, MAX_CHANNELS>,
-    chats: FnvIndexMap<ChannelId, Chat<MAX_NODES, C>, MAX_CHANNELS>,
+    channels: FnvIndexMap<ChannelId, Channel<MAX_NODES, I, C>, MAX_CHANNELS>,
 }
 
 impl<
@@ -96,12 +104,22 @@ impl<
             crypto,
             key_pair,
             channels: FnvIndexMap::new(),
-            storage: FnvIndexMap::new(),
-            chats: FnvIndexMap::new(),
         }
     }
 
-    pub fn send_message(&mut self, test: &str) -> Result<(), ClientError> {
+    pub fn send_message(&mut self, channel_id: &ChannelId, test: &str) -> Result<(), ClientError> {
+        unimplemented!()
+    }
+
+    pub fn add_node(&mut self, channel_id: &ChannelId, pub_key: C::PubSigningKey) -> Result<(), ClientError> {
+        unimplemented!()
+    }
+
+    pub fn remove_node(&mut self, channel_id: &ChannelId, node_id: &NodeId) -> Result<(), ClientError> {
+        unimplemented!()
+    }
+
+    pub fn list_nodes<'b>(&'a self, channel_id: &ChannelId) -> Result<&'b [NodeSequence<C::PubSigningKey>], ClientError> {
         unimplemented!()
     }
 
@@ -136,16 +154,15 @@ impl<
             }
         }
 
-        let Ok(_) = self.channels.insert(channel_id.clone(), channel) else {
+        let full_channel = Channel {
+            id: channel_id.clone(),
+            channel,
+            storage,
+            chat,
+        };
+
+        let Ok(_) = self.channels.insert(channel_id.clone(), full_channel) else {
             return Err(ClientError::ChannelLimit);
-        };
-
-        let Ok(_) = self.storage.insert(channel_id.clone(), storage) else {
-            return Err(ClientError::Unreachable);
-        };
-
-        let Ok(_) = self.chats.insert(channel_id.clone(), chat) else {
-            return Err(ClientError::Unreachable);
         };
 
         Ok(())
@@ -199,16 +216,15 @@ impl<
         slab_writer.write_record(max_sequance, &serlized_envlope)?;
         slab_writer.commit()?;
 
-        let Ok(_) = self.channels.insert(channel_id.clone(), channel) else {
+        let full_channel = Channel {
+            id: channel_id.clone(),
+            channel,
+            storage,
+            chat,
+        };
+
+        let Ok(_) = self.channels.insert(channel_id.clone(), full_channel) else {
             return Err(ClientError::ChannelLimit);
-        };
-
-        let Ok(_) = self.storage.insert(channel_id.clone(), storage) else {
-            return Err(ClientError::Unreachable);
-        };
-
-        let Ok(_) = self.chats.insert(channel_id.clone(), chat) else {
-            return Err(ClientError::Unreachable);
         };
 
         Ok(channel_id)

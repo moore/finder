@@ -14,15 +14,15 @@ fn test_init_chat() -> Result<(), ClientError> {
     let seed = [0; 128];
     let mut crypto = RustCrypto::new(&seed)?;
     let key_pair = get_test_keys();
-    let mut data = [0; MEGA_BYTE];
-    let io: MemIO<'_, SLAB_SIZE> = MemIO::new(&mut data)?;
+    static mut buffer: [u8 ; MEGA_BYTE] = [0u8; MEGA_BYTE];
+    let data = unsafe { &mut buffer };
+    let io: MemIO<'_, SLAB_SIZE> = MemIO::new(data)?;
 
     let mut client: Client<'_, MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto> 
         = Client::new(key_pair, &mut crypto);
 
     let name_str = "Test Chat";
     let channel_id = client.init_chat(name_str, io)?;
-
     Ok(())
 }
 
@@ -32,9 +32,7 @@ fn test_open_chat() -> Result<(), ClientError> {
     let mut crypto = RustCrypto::new(&seed)?;
     let key_pair = get_test_keys();
     static mut buffer: [u8 ; MEGA_BYTE] = [0u8; MEGA_BYTE];
-    let data = unsafe {
-        &mut buffer
-    };
+    let data = unsafe { &mut buffer };
 
     let channel_id = {
     let io: MemIO<'_, SLAB_SIZE> = MemIO::new(data)?;

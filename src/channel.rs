@@ -53,9 +53,9 @@ pub struct Message<T> {
 }
 
 #[derive(Debug, Copy, Clone)]
-struct NodeSequence<P> {
-    public_key: P,
-    node: NodeId,
+pub struct NodeSequence<P> {
+    pub public_key: P,
+    pub node: NodeId,
     id: EnvelopeId,
     sequence: u64,
 }
