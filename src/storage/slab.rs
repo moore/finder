@@ -1,4 +1,5 @@
 use super::*;
+use parking_lot::RawMutex;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Slab<'a> {
@@ -80,8 +81,8 @@ impl<'a, I: IO> SlabWriter<'a, I> {
         }
     }
 
-    pub fn write_record(&mut self, max_sequence: u64, data: &[u8]) -> Result<(), StorageError> {
-        let record = Record { max_sequence, data };
+    pub fn write_record(&mut self, max_sequence: u64, message_count: u64, data: &[u8]) -> Result<(), StorageError> {
+        let record = Record { max_sequence, message_count, data };
 
         if self.slab_max_sequence > record.max_sequence {
             return Err(StorageError::OutOfOrder);

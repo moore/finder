@@ -54,6 +54,7 @@ pub trait IO {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Record<'a> {
     max_sequence: u64,
+    message_count: u64,
     data: &'a [u8],
 }
 

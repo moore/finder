@@ -102,5 +102,12 @@ fn test_send_message() -> Result<(), ClientError> {
     let channel_id = client.init_chat(name_str, io)?;
     let nodes = client.list_nodes(&channel_id)?;
     assert_eq!(nodes.len(), 1);
+
+    client.send_message(&channel_id, "This is a test message with words in it")?;
+    assert_eq!(client.message_count(&channel_id)?, 1);
+    client.send_message(&channel_id, "Here we have a second message")?;
+    assert_eq!(client.message_count(&channel_id)?, 2);
+
+
     Ok(())
 }

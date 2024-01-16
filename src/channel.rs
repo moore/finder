@@ -157,11 +157,15 @@ impl<const MAX_NODES: usize, P: Clone> ChannelState<MAX_NODES, P> {
 
         let current = self.get_current()?;
 
+        let max_sequence: u64;
         // Updated newest if needed.
         if current.sequence < message.sequence
             || (current.sequence == message.sequence && current.id < *id)
         {
+            max_sequence = message.sequence;
             self.newest = from;
+        } else {
+            max_sequence = current.sequence;
         }
 
         let record_mut = self.nodes.get_mut(index).ok_or(ChannelError::Unreachable)?;
@@ -169,13 +173,7 @@ impl<const MAX_NODES: usize, P: Clone> ChannelState<MAX_NODES, P> {
         record_mut.sequence = message.sequence;
         record_mut.id = *id;
 
-        let min_record = self
-            .nodes
-            .iter()
-            .min_by_key(|n| n.sequence)
-            .ok_or(ChannelError::Unreachable)?;
-
-        Ok(min_record.sequence)
+        Ok(max_sequence)
     }
 
     pub fn check_receive<T: Serialize>(

@@ -37,13 +37,21 @@ pub enum ChatError {
     MaxUsersExceeded,
     Uninitlized,
     Unauthorized,
+    Unreachable,
 }
 
 pub struct Chat<const MAX_USERS: usize, C: Crypto> {
     id: ChannelId,
     owner_id: Option<NodeId>,
     users: FnvIndexMap<NodeId, C::PubSigningKey, MAX_USERS>,
+    message_count: u64,
     _phantom: PhantomData<C>,
+}
+
+pub enum AcceptResult<C: Crypto> {
+    AddUser(C::PubSigningKey),
+    NewMessage(u64),
+    None,
 }
 
 impl<'a, const MAX_USERS: usize, C: Crypto> Chat<MAX_USERS, C> {
@@ -52,8 +60,13 @@ impl<'a, const MAX_USERS: usize, C: Crypto> Chat<MAX_USERS, C> {
             id,
             owner_id: None,
             users: FnvIndexMap::new(),
+            message_count: 0,
             _phantom: PhantomData::<C>,
         }
+    }
+
+    pub fn message_count(&self) -> u64 {
+        self.message_count
     }
 
     pub fn accept_message(
@@ -61,7 +74,7 @@ impl<'a, const MAX_USERS: usize, C: Crypto> Chat<MAX_USERS, C> {
         id: ChannelId,
         author: NodeId,
         message: &Protocol<C::PubSigningKey>,
-    ) -> Result<Option<C::PubSigningKey>, ChatError> {
+    ) -> Result<AcceptResult<C>, ChatError> {
         match message {
             Protocol::NewChannel(new_channel) => {
                 if id != self.id {
@@ -73,7 +86,7 @@ impl<'a, const MAX_USERS: usize, C: Crypto> Chat<MAX_USERS, C> {
                 let owner_id = self.add_user(key)?;
                 self.owner_id = Some(owner_id);
 
-                Ok(None)
+                Ok(AcceptResult::None)
             }
             Protocol::AddUser(add_user) => {
                 let Some(owner_id) = &self.owner_id else {
@@ -85,14 +98,17 @@ impl<'a, const MAX_USERS: usize, C: Crypto> Chat<MAX_USERS, C> {
                 }
 
                 self.add_user(&add_user.key)?;
-                Ok(Some(add_user.key.clone()))
+                Ok(AcceptResult::AddUser(add_user.key.clone()))
             }
             Protocol::ChatMessage(chat_message) => {
                 if !self.users.contains_key(&author) {
                     return Err(ChatError::Unauthorized);
                 }
 
-                Ok(None)
+                self.message_count = self.message_count.checked_add(1)
+                    .ok_or(ChatError::Unreachable)?;
+
+                Ok(AcceptResult::NewMessage(self.message_count))
             }
         }
     }

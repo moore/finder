@@ -29,7 +29,7 @@ fn test_storage_write_read() -> Result<(), StorageError> {
     for i in 0..3 {
         data[0] = i as u8;
 
-        writer.write_record(i, &data)?;
+        writer.write_record(i, 0, &data)?;
     }
 
     writer.commit();
@@ -70,7 +70,7 @@ fn test_storage_write_read2() -> Result<(), StorageError> {
 
     for i in 0..3 {
         data[0] = i as u8;
-        writer.write_record(i, &data)?;
+        writer.write_record(i, 0, &data)?;
     }
 
     writer.commit()?;
@@ -80,7 +80,7 @@ fn test_storage_write_read2() -> Result<(), StorageError> {
     for i in 3..6 {
         data[0] = i as u8;
 
-        writer.write_record(i, &data)?;
+        writer.write_record(i, 0, &data)?;
     }
 
     writer.commit()?;

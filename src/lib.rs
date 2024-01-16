@@ -135,8 +135,11 @@ impl<
         }
     }
 
-    pub const fn get_map() ->  FnvIndexMap<ChannelId, Channel<MAX_NODES, I, C>, MAX_CHANNELS> {
-        FnvIndexMap::new()
+    pub fn message_count(&self, channel_id: &ChannelId) -> Result<u64, ClientError> {
+        let channel = self.channels.get(channel_id)
+            .ok_or(ClientError::Unreachable)?;
+        
+        Ok(channel.chat.message_count())
     }
 
     pub fn send_message(&mut self, channel_id: &ChannelId, msg: &str) -> Result<(), ClientError> {
@@ -203,9 +206,9 @@ impl<
                 
                 channel.check_receive(from, &message, &envlope_id)?;
                 
-                let maby_key = chat.accept_message(channel_id, from, &message.data)?;
+                let accept_result = chat.accept_message(channel_id, from, &message.data)?;
                 
-                if let Some(new_pub_key) = maby_key {
+                if let AcceptResult::AddUser(new_pub_key) = accept_result {
                     let node_id = C::compute_id(&new_pub_key);
                     channel.add_node(node_id, new_pub_key)?;
                 }
@@ -272,11 +275,12 @@ impl<
         // -check the message on chat
         chat.accept_message(channel_id.clone(), my_id, &message.data)?;
         // -receive it
-        let max_sequance = channel.receive(my_id, &message, &envlope_id)?;
+        let max_sequence = channel.receive(my_id, &message, &envlope_id)?;
         // -store it
+        let message_count = chat.message_count();
         let mut slab_writer = storage.get_writer()?;
         let serlized_envlope = to_slice(&sealed_envelope, target.as_mut_slice())?;
-        slab_writer.write_record(max_sequance, &serlized_envlope)?;
+        slab_writer.write_record(max_sequence, message_count, &serlized_envlope)?;
         slab_writer.commit()?;
 
         let full_channel = Channel {
@@ -321,15 +325,16 @@ impl<
         };
 
         // - store the pub key for later
-        if let Some(new_pub_key) = result {
+        if let AcceptResult::AddUser(new_pub_key) = result {
             let node_id = C::compute_id(&new_pub_key);
             channel.state.add_node(node_id, new_pub_key)?;
         }
 
         // -store it
+        let message_count = channel.chat.message_count();
         let mut slab_writer = channel.storage.get_writer()?;
         let serlized_envlope = to_slice(&envelope, target.as_mut_slice())?;
-        slab_writer.write_record(max_sequance, &serlized_envlope)?;
+        slab_writer.write_record(max_sequance, message_count, &serlized_envlope)?;
         slab_writer.commit()?;
 
         Ok(())
