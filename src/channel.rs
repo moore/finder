@@ -101,6 +101,10 @@ impl<const MAX_NODES: usize, P: Clone> ChannelState<MAX_NODES, P> {
         })
     }
 
+    pub fn list_nodes(&self) -> &[NodeSequence<P>] {
+        &self.nodes
+    }
+
     pub fn add_node(&mut self, node: NodeId, node_key: P) -> Result<(), ChannelError> {
 
         let pos = self.nodes.binary_search_by_key(&node, |ns| ns.node);
