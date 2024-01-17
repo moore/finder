@@ -9,6 +9,7 @@ edition = "2021"
 ascon-hash = { version = "0.2.0", features = []} 
 heapless = { version = "0.8.0", features = ["serde"] }
 hkdf = "0.12.4"
+once_cell = { version = "1.19.0", features = []}
 parking_lot = "0.12.1"
 postcard = { version = "1.0.0" }
 rand = { version = "0.8.5", features = ["rand_chacha"], default-features = false }

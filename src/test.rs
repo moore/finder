@@ -14,18 +14,18 @@ fn test_init_chat() -> Result<(), ClientError> {
     let seed = [0; 128];
     let mut crypto = RustCrypto::new(&seed)?;
     let key_pair = get_test_keys();
-    static mut buffer: [u8 ; MEGA_BYTE] = [0u8; MEGA_BYTE];
-    let data = unsafe { &mut buffer };
+    static buffer: GuardCell<[u8 ; MEGA_BYTE]> = GuardCell::wrap([0u8; MEGA_BYTE]);
+    let data = buffer.take_mut()?;
     let io: MemIO<'_, SLAB_SIZE> = MemIO::new(data)?;
 
     //let mut client: Client<'_, MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto> 
     //    = Client::new(key_pair, &mut crypto);
 
-    const channels_const: ClientChannels<MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto> = ClientChannels::new();
+    static channels_const: GuardCell<ClientChannels<MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto>> 
+        = GuardCell::wrap(ClientChannels::new());
 
-    let channels = unsafe {
-        &mut channels_const
-    };
+    let channels = channels_const.take_mut()?;
+
 
     let mut client: Client<'_, '_, MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto> 
         = Client::new(key_pair, &mut crypto, channels);
@@ -42,32 +42,35 @@ fn test_open_chat() -> Result<(), ClientError> {
     static seed: [u8 ; 128] = [0u8; 128];
     let mut crypto = RustCrypto::new(&seed)?;
     let key_pair = get_test_keys();
-    static mut buffer: [u8 ; MEGA_BYTE] = [0u8; MEGA_BYTE];
-    let data = unsafe { &mut buffer };
+    
 
     let channel_id = {
+        static buffer: GuardCell<[u8 ; MEGA_BYTE]> = GuardCell::wrap([0u8; MEGA_BYTE]);
+        let data = buffer.take_mut()?;
+        let io: MemIO<'_, SLAB_SIZE> = MemIO::new(data)?;
+
+        static channels_const: GuardCell<ClientChannels<MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto>> 
+        = GuardCell::wrap(ClientChannels::new());
+
+        let channels = channels_const.take_mut()?;
+
+
+        let mut client: Client<'_, '_, MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto> 
+            = Client::new(key_pair.clone(), &mut crypto, channels);
+
+        let name_str = "Test Chat";
+        client.init_chat(name_str, io)?
+    };
+
+    static buffer: GuardCell<[u8 ; MEGA_BYTE]> = GuardCell::wrap([0u8; MEGA_BYTE]);
+    let data = buffer.take_mut()?;
     let io: MemIO<'_, SLAB_SIZE> = MemIO::new(data)?;
 
-    const channels_const: ClientChannels<MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto> = ClientChannels::new();
+    static channels_const: GuardCell<ClientChannels<MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto>> 
+    = GuardCell::wrap(ClientChannels::new());
 
-    let channels = unsafe {
-        &mut channels_const
-    };
+    let channels = channels_const.take_mut()?;
 
-    let mut client: Client<'_, '_, MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto> 
-        = Client::new(key_pair.clone(), &mut crypto, channels);
-
-    let name_str = "Test Chat";
-    client.init_chat(name_str, io)?
-    };
-
-    let io: MemIO<'_, SLAB_SIZE> = MemIO::new(data)?;
-
-    const channels_const: ClientChannels<MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto> = ClientChannels::new();
-
-    let channels = unsafe {
-        &mut channels_const
-    };
 
     let mut client: Client<'_, '_, MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto> 
         = Client::new(key_pair, &mut crypto, channels);
@@ -85,15 +88,14 @@ fn test_send_message() -> Result<(), ClientError> {
     let seed = [0; 128];
     let mut crypto = RustCrypto::new(&seed)?;
     let key_pair = get_test_keys();
-    static mut buffer: [u8 ; MEGA_BYTE] = [0u8; MEGA_BYTE];
-    let data = unsafe { &mut buffer };
+    static buffer: GuardCell<[u8 ; MEGA_BYTE]> = GuardCell::wrap([0u8; MEGA_BYTE]);
+    let data = buffer.take_mut()?;
     let io: MemIO<'_, SLAB_SIZE> = MemIO::new(data)?;
 
-    const channels_const: ClientChannels<MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto> = ClientChannels::new();
+    static channels_const: GuardCell<ClientChannels<MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto>> 
+        = GuardCell::wrap(ClientChannels::new());
     
-    let channels = unsafe {
-        &mut channels_const
-    };
+    let channels = channels_const.take_mut()?;
 
     let mut client: Client<'_, '_, MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto> 
         = Client::new(key_pair, &mut crypto, channels);

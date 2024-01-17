@@ -18,6 +18,9 @@ use chat::*;
 mod crypto;
 use crypto::*;
 
+mod heap_type;
+use heap_type::*;
+
 #[cfg(test)]
 mod test;
 
@@ -33,6 +36,13 @@ enum ClientError {
     StringTooLarge,
     UnknownChannel,
     MessageToLarge,
+    SafeStaticError,
+}
+
+impl From<SafeStaticError> for ClientError {
+    fn from(value: SafeStaticError) -> Self {
+        ClientError::SafeStaticError
+    }
 }
 
 impl From<postcard::Error> for ClientError {
