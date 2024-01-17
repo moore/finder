@@ -4,7 +4,7 @@ use core::mem;
 use once_cell::unsync::OnceCell;
 
 #[derive(Debug)]
-pub enum SafeStaticError {
+pub enum GuardCellError {
     AlreadyUsed,
     Unreachable,
 }
@@ -18,15 +18,20 @@ impl<T> GuardCell<T> where T: 'static{
         GuardCell::<T>(Mutex::new(cell))
     }
 
-    pub fn take_mut(&'static self) -> Result<&'static mut T, SafeStaticError> {
+    pub fn take_mut(&'static self) -> Result<&'static mut T, GuardCellError> {
         let GuardCell(inner) = self;
         let mut guard = inner.try_lock()
-            .ok_or(SafeStaticError::AlreadyUsed)?;
+            .ok_or(GuardCellError::AlreadyUsed)?;
 
         let src = guard.get_mut()
-            .ok_or(SafeStaticError::Unreachable)?;
+            .ok_or(GuardCellError::Unreachable)?;
 
         let result = unsafe {
+            // SAFETY: This is safe because `T` is defined as `'static`
+            // and we drop the guard so this can only be done once
+            // guaranteeing that only a single `&mut` exists to the 
+            // allocation. Additionally there is no way to get at 
+            // the underlying allocation other than this function.  
             mem::transmute::<
                 &mut T, 
                 &'static mut T

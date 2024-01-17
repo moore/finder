@@ -39,8 +39,8 @@ enum ClientError {
     SafeStaticError,
 }
 
-impl From<SafeStaticError> for ClientError {
-    fn from(value: SafeStaticError) -> Self {
+impl From<GuardCellError> for ClientError {
+    fn from(value: GuardCellError) -> Self {
         ClientError::SafeStaticError
     }
 }
