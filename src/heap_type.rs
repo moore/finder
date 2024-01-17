@@ -28,7 +28,7 @@ impl<T> GuardCell<T> where T: 'static{
 
         let result = unsafe {
             // SAFETY: This is safe because `T` is defined as `'static`
-            // and we drop the guard so this can only be done once
+            // and we leak the guard so this can only be done once
             // guaranteeing that only a single `&mut` exists to the 
             // allocation. Additionally there is no way to get at 
             // the underlying allocation other than this function.  
