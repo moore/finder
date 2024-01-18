@@ -7,13 +7,13 @@ pub struct Slab<'a> {
     offset: usize,
     count: u32,
     slab_max_sequence: u64,
-    // [count: u32][slab_max_sequence: u64][length:u32][max_sequence: u64][data: [u8]]
+    // [count: u32][slab_max_sequence: u64][length:u32][data: [u8]]
     records: &'a [u8], // Record Data
-}
+}   
 
 impl<'a> Slab<'a> {
     pub fn new(data: &'a [u8], index: usize) -> Result<Self, StorageError> {
-        let (count, mut offset) = read_u32(data, 0)?;
+        let (count, offset) = read_u32(data, 0)?;
         let (slab_max_sequence, offset) = read_u64(data, offset)?;
 
         Ok(Slab {
@@ -25,14 +25,23 @@ impl<'a> Slab<'a> {
         })
     }
 
+    pub fn record_count(&self) -> u32 {
+        self.count
+    }
+
     pub fn get_head(&self) -> Cursor {
         Cursor {
             slab: self.slab,
             offset: self.offset,
+            read_count: 0,
         }
     }
 
     pub fn read(&self, mut cursor: Cursor) -> Result<Option<(Record<'a>, Cursor)>, StorageError> {
+        if cursor.read_count >= self.record_count() {
+            return Ok(None)
+        }
+
         let at = cursor.offset;
         let (length, offset) = read_u32(self.records, at)?;
 
@@ -51,10 +60,10 @@ impl<'a> Slab<'a> {
         let Some(slice) = self.records.get(offset..end_offset) else {
             return Ok(None);
         };
-
         let mut record: Record<'_> = from_bytes(slice)?;
-
         cursor.offset = end_offset;
+        cursor.read_count = cursor.read_count.checked_add(1)
+            .ok_or(StorageError::Unreachable)?;
 
         Ok(Some((record, cursor)))
     }

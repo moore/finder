@@ -35,7 +35,7 @@ fn test_storage_write_read() -> Result<(), StorageError> {
     writer.commit();
 
     let mut cursor = storage
-        .get_cursor_from(0)?
+        .get_cursor_from_sequence(0)?
         .expect("expected to find cursor");
     let mut expect = 0;
     while let Some((data, next)) = storage.read(cursor)? {
@@ -46,7 +46,7 @@ fn test_storage_write_read() -> Result<(), StorageError> {
     assert_eq!(expect, 3);
 
     let mut cursor = storage
-        .get_cursor_from(2)?
+        .get_cursor_from_sequence(2)?
         .expect("expected to find cursor");
 
     let mut expect = 2;
@@ -86,7 +86,7 @@ fn test_storage_write_read2() -> Result<(), StorageError> {
     writer.commit()?;
 
     let mut cursor = storage
-        .get_cursor_from(0)?
+        .get_cursor_from_sequence(0)?
         .expect("expected to find cursor");
     let mut expect = 0;
     while let Some((data, next)) = storage.read(cursor)? {
@@ -97,7 +97,7 @@ fn test_storage_write_read2() -> Result<(), StorageError> {
     assert_eq!(expect, 6);
 
     let mut cursor = storage
-        .get_cursor_from(3)?
+        .get_cursor_from_sequence(3)?
         .expect("expected to find cursor");
 
     let mut expect = 3;

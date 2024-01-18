@@ -30,6 +30,7 @@ impl From<postcard::Error> for StorageError {
 pub struct Cursor {
     slab: usize,
     offset: usize,
+    read_count: u32,
 }
 
 pub trait IO {
@@ -142,7 +143,7 @@ where
     }
 
 
-    pub fn get_cursor_from(&self, sequence: u64) -> Result<Option<Cursor>, StorageError> {
+    pub fn get_cursor_from_sequence(&self, sequence: u64) -> Result<Option<Cursor>, StorageError> {
         let mut index = self.io.get_head()?;
 
         loop {
@@ -174,6 +175,40 @@ where
             }
         }
     }
+
+    pub fn get_cursor_from_index(&self, message_index: u64) -> Result<Option<Cursor>, StorageError> {
+        let mut index = self.io.get_head()?;
+
+        loop {
+            let slab = match self.io.get_slab(index) {
+                Ok(slab) => slab,
+                Err(e) => match e {
+                    StorageError::OutOfBounds => {
+                        return Ok(None);
+                    }
+                    _ => {
+                        return Err(e);
+                    }
+                },
+            };
+
+            let mut cursor = slab.get_head();
+            let mut curosr_copy = cursor.clone();
+            while let Some((record, next)) = slab.read(cursor)? {
+                if record.message_count >= message_index {
+                    return Ok(Some(curosr_copy));
+                }
+                curosr_copy = next.clone();
+                cursor = next;
+            }
+
+            match index.checked_add(1) {
+                Some(v) => index = v,
+                None => return Ok(None),
+            }
+        }
+    }
+
 
     pub fn read<'a>(
         &'a self,

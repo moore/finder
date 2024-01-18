@@ -105,11 +105,18 @@ fn test_send_message() -> Result<(), ClientError> {
     let nodes = client.list_nodes(&channel_id)?;
     assert_eq!(nodes.len(), 1);
 
-    client.send_message(&channel_id, "This is a test message with words in it")?;
+    let message1 = "This is a test message with words in it";
+    let message2 = "Here we have a second message";
+    client.send_message(&channel_id, message1)?;
     assert_eq!(client.message_count(&channel_id)?, 1);
-    client.send_message(&channel_id, "Here we have a second message")?;
+    client.send_message(&channel_id, message2)?;
     assert_eq!(client.message_count(&channel_id)?, 2);
 
+    let message = client.get_message(&channel_id, 2)?;
+    assert_eq!(message.text, message2);
+    let message = client.get_message(&channel_id, 1)?;
+    assert_eq!(message.text, message1);
 
+    //assert_eq!("This is a test message with words in it", message.text);
     Ok(())
 }

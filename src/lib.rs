@@ -37,6 +37,7 @@ enum ClientError {
     UnknownChannel,
     MessageToLarge,
     SafeStaticError,
+    MessageIndexOutOfBounds,
 }
 
 impl From<GuardCellError> for ClientError {
@@ -166,6 +167,26 @@ impl<
         Ok(())
     }
 
+    pub fn get_message<'c>(&'c self, channel_id: &ChannelId, index: u64) -> Result<ChatMessage, ClientError> {
+        let channel = self.channels.get(channel_id)
+            .ok_or(ClientError::UnknownChannel)?;
+
+        let cursor = channel.storage.get_cursor_from_index(index)?
+            .ok_or(ClientError::MessageIndexOutOfBounds)?;
+
+        let (bytes, cursor) = channel.storage.read(cursor)?
+            .ok_or(ClientError::Unreachable)?;
+
+        let envelope: SealedEnvelope<Protocol<C::PubSigningKey>, MAX_ENVELOPE, MAX_SIG> = from_bytes(bytes)?;
+        let key = channel.state.get_node_key(envelope.from)?;
+        let message = self.crypto.open(&key, &envelope)?;
+        let Protocol::ChatMessage(message) = message.data else {
+            return Err(ClientError::Unreachable);
+        };
+
+        Ok(message)
+    }
+
     pub fn add_node(&mut self, channel_id: &ChannelId, pub_key: C::PubSigningKey, name: &str) -> Result<(), ClientError> {
         let Ok(name_string) = String::try_from(name) else {
             return Err(ClientError::MessageToLarge);
@@ -202,7 +223,7 @@ impl<
 
         let mut chat = Chat::<MAX_NODES, C>::new(channel_id.clone());
 
-        let start = storage.get_cursor_from(0)?;
+        let start = storage.get_cursor_from_sequence(0)?;
 
         if let Some(mut cursor) = start {
             while let Some(found) = storage.read(cursor)? {
@@ -344,6 +365,7 @@ impl<
         let message_count = channel.chat.message_count();
         let mut slab_writer = channel.storage.get_writer()?;
         let serlized_envlope = to_slice(&envelope, target.as_mut_slice())?;
+
         slab_writer.write_record(max_sequance, message_count, &serlized_envlope)?;
         slab_writer.commit()?;
 
