@@ -117,6 +117,5 @@ fn test_send_message() -> Result<(), ClientError> {
     let message = client.get_message(&channel_id, 1)?;
     assert_eq!(message.text, message1);
 
-    //assert_eq!("This is a test message with words in it", message.text);
     Ok(())
 }
