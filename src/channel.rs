@@ -57,7 +57,8 @@ pub struct NodeSequence<P> {
     pub public_key: P,
     pub node: NodeId,
     id: EnvelopeId,
-    sequence: u64,
+    pub first_sequence: u64,
+    pub sequence: u64,
 }
 
 #[derive(Debug)]
@@ -71,7 +72,8 @@ pub enum ChannelError {
     SequenceOverFlow,
     Unreachable,
     NodeExists,
-    UnknownNode
+    UnknownNode,
+    AlreadyReceived,
 }
 
 #[derive(Debug)]
@@ -89,6 +91,7 @@ impl<const MAX_NODES: usize, P: Clone> ChannelState<MAX_NODES, P> {
             node: initial,
             id: EnvelopeId::new(0),
             sequence: 0,
+            first_sequence: 0,
         };
 
         if let Err(_) = nodes.push(initial_record) {
@@ -120,6 +123,7 @@ impl<const MAX_NODES: usize, P: Clone> ChannelState<MAX_NODES, P> {
                     node: node,
                     id: EnvelopeId::new(0),
                     sequence: 0,
+                    first_sequence: 0,
                 };
 
                 if let Err(_) = self.nodes.insert(index, record) {
@@ -173,6 +177,10 @@ impl<const MAX_NODES: usize, P: Clone> ChannelState<MAX_NODES, P> {
         record_mut.sequence = message.sequence;
         record_mut.id = *id;
 
+        if record_mut.first_sequence == 0 {
+            record_mut.first_sequence = message.sequence;
+        }
+
         Ok(max_sequence)
     }
 
@@ -201,10 +209,13 @@ impl<const MAX_NODES: usize, P: Clone> ChannelState<MAX_NODES, P> {
             }
         };
 
-        let record = self.nodes.get(index).ok_or(ChannelError::Unreachable)?;
+        let record = self.nodes.get(index)
+            .ok_or(ChannelError::Unreachable)?;
 
         // check that the sequence last matches
-        if record.sequence != message.sender_last {
+        if record.sequence < message.sender_last {
+            return Err(ChannelError::AlreadyReceived);
+        } else if record.sequence != message.sender_last {
             return Err(ChannelError::MissingFromSender {
                 node: from,
                 have: record.sequence,

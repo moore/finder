@@ -247,14 +247,14 @@ where
     }
 }
 
-fn read_u32(data: &[u8], offset: usize) -> Result<(u32, usize), StorageError> {
+pub fn read_u32(data: &[u8], offset: usize) -> Result<(u32, usize), StorageError> {
     let (len_arr, len_end) = read_arr(data, offset)?;
     let length = u32::from_be_bytes(len_arr);
 
     Ok((length, len_end))
 }
 
-fn write_u32(value: u32, target: &mut [u8], mut offset: usize) -> Result<usize, StorageError> {
+pub fn write_u32(value: u32, target: &mut [u8], mut offset: usize) -> Result<usize, StorageError> {
     let data = value.to_be_bytes();
     offset = write_arr(data, target, offset)?;
 

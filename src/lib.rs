@@ -1,6 +1,7 @@
 #![no_std]
 
-use core::{marker::PhantomData, mem::size_of, ops::Deref};
+use core::{marker::PhantomData, mem::size_of, ops::Deref, cmp::max};
+use ascon_hash::digest::generic_array::sequence;
 use heapless::{FnvIndexMap, Vec, String};
 
 use postcard::{from_bytes, to_slice};
@@ -20,6 +21,9 @@ use crypto::*;
 
 mod heap_type;
 use heap_type::*;
+
+mod sync;
+use sync::*;
 
 #[cfg(test)]
 mod test;
@@ -109,6 +113,9 @@ C: Crypto,
 
 const MAX_SIG: usize = 256;
 const MAX_ENVELOPE: usize = 1024 - MAX_SIG; 
+const LEN_SIZE: usize = size_of::<u32>();
+type RecordLength = u32;
+
 pub struct Client<
     'a,
     'b,
@@ -146,9 +153,152 @@ impl<
         }
     }
 
+    pub fn finish_sync_request(&self, channel_id: &ChannelId, request: &mut SyncRequest<MAX_NODES>) -> Result<(), ClientError> {
+        let channel = self.channels.get(channel_id)
+            .ok_or(ClientError::UnknownChannel)?;
+        let nodes = channel.state.list_nodes();
+
+        request.vector_clock.truncate(0);
+
+        for node in nodes {
+            let clock = Clock::new(node.node, node.sequence);
+            request.vector_clock.push(clock);
+        }
+
+        Ok(())
+    }
+
+    // we fill out the SyncResponderSate's vector clock by 
+    // merging the nodes and their sequences. If they are missing
+    // and node set it's sequence to the nodes first sequence.
+    //
+    // BUG: I was irrupted a bunch writing this it needs to reviewed
+    pub fn start_sync_response(&self, channel_id: &ChannelId, state: &mut SyncResponderState<MAX_NODES>, request: &SyncRequest<MAX_NODES> ) -> Result<(), ClientError> {
+        let channel = self.channels.get(channel_id)
+            .ok_or(ClientError::UnknownChannel)?;
+
+        // Set the SyncResponderState vector clock to be values from the 
+        // request or 0 if request is missing a node
+        state.vector_clock.truncate(0);
+
+        let mut request_index = 0;
+
+        'outer: for my_node in channel.state.list_nodes() {
+            while let Some(request_node) = request.vector_clock.get(request_index) {
+                if request_node.node == my_node.node {
+                    // if they are equal advance both clocks
+                    let clock = Clock::new(request_node.node, request_node.sequence);
+                    state.vector_clock.push(clock)
+                        .or(Err(ClientError::Unreachable))?;
+
+                    // Safe because MAX_NODE < usize MAX
+                    request_index += 1;
+
+                    // We need to return to the outer loop to advance
+                    // to the next node there.
+                    continue 'outer;
+
+                } else if request_node.node < my_node.node {
+                    // if request is smaller add it's clock
+                    let clock = Clock::new(request_node.node, request_node.sequence);
+                    state.vector_clock.push(clock)
+                        .or(Err(ClientError::Unreachable))?;
+
+                    // Safe because MAX_NODE < usize MAX
+                    request_index += 1;
+                } else {
+                    // Handle this case in the outer loop
+                    // to handel the case where we have exhausted
+                    // request vector
+                    break;
+                }
+
+            }
+
+            // If we are here that means they don't have the node
+            let clock = Clock::new(my_node.node, my_node.first_sequence);
+            state.vector_clock.push(clock)
+                .or(Err(ClientError::Unreachable))?;
+        }
+
+        // If there are any request clocks left add them to the end.
+        while let Some(request_node) = request.vector_clock.get(request_index) {
+            let clock = Clock::new(request_node.node, request_node.sequence);
+            state.vector_clock.push(clock)
+                .or(Err(ClientError::Unreachable))?;
+
+            // Safe because MAX_NODE < usize MAX
+            request_index += 1;
+        }
+
+        Ok(())
+    }
+
+
+    pub fn fill_send_buffer(&self, channel_id: &ChannelId, state: &mut SyncResponderState<MAX_NODES>, buffer: &mut [u8]) -> Result<(u32, usize), ClientError> {
+        let channel = self.channels.get(channel_id)
+            .ok_or(ClientError::UnknownChannel)?;
+
+        let start = state.get_min_sequence()
+            .ok_or(ClientError::Unreachable)?;
+
+        let mut cursor = channel.storage.get_cursor_from_sequence(start)?
+            .ok_or(ClientError::Unreachable)?;
+    
+        let mut offset = 0;
+        let mut count = 0;
+
+        while let Some((data, next)) = channel.storage.read(cursor)? {
+ 
+            // BUG: need to see if this is a message they need and update the `state`
+            // Right now this will send them things they may not need
+
+            if (buffer.len() - offset) < (data.len() + LEN_SIZE) {
+                break;
+            }
+
+            let len = data.len() as u32;
+            offset = write_u32(len, buffer, offset)?;
+
+
+            let target = buffer.get_mut(offset..(offset + data.len()))
+                .ok_or(ClientError::Unreachable)?;
+
+            target.copy_from_slice(data);
+
+            offset += data.len();
+            count += 1;
+            cursor = next;
+        }
+
+        Ok((count, offset))
+    }
+
+    pub fn receive_buffer(&mut self, channel_id: &ChannelId, buffer: &[u8], count: u32) -> Result<(), ClientError> {
+        let mut offset = 0;
+        let mut buffer = buffer;
+        for _ in 0..count {
+            let mut len: u32;
+            (len, offset) = read_u32(buffer, offset)?;
+            let end = offset + len as usize;
+            let envelope_bytes = buffer.get(offset..end)
+                // BUG: this is not unreachable but I don't have the right
+                // error and I think all this code should move in the the sync mod.
+                .ok_or(ClientError::Unreachable)?; 
+
+                match self.do_recieve(channel_id, envelope_bytes) {
+                    Ok(_) => (),
+                    Err(ClientError::ChannelError(ChannelError::AlreadyReceived)) => (),
+                    Err(err) => return Err(err),
+                }
+        }
+
+        Ok(())
+    }
+
     pub fn message_count(&self, channel_id: &ChannelId) -> Result<u64, ClientError> {
         let channel = self.channels.get(channel_id)
-            .ok_or(ClientError::Unreachable)?;
+            .ok_or(ClientError::UnknownChannel)?;
         
         Ok(channel.chat.message_count())
     }
@@ -367,6 +517,52 @@ impl<
         let serlized_envlope = to_slice(&envelope, target.as_mut_slice())?;
 
         slab_writer.write_record(max_sequance, message_count, &serlized_envlope)?;
+        slab_writer.commit()?;
+
+        Ok(())
+    }
+
+    fn do_recieve(&mut self, channel_id: &ChannelId, bytes: &[u8]) -> Result<(), ClientError> {
+        let sealed_envelope: SealedEnvelope<Protocol<C::PubSigningKey>, MAX_ENVELOPE, MAX_SIG> 
+            = from_bytes(bytes)?;
+
+        let from = sealed_envelope.from();
+
+        let channel = self.channels.get_mut(channel_id)
+            .ok_or(ClientError::UnknownChannel)?;
+
+        let key =  channel.state.get_node_key(from)?;
+    
+        
+        let message = self.crypto.open(&key, &sealed_envelope)?;
+
+        let envlope_id = self.crypto.envelope_id(&sealed_envelope);
+        // -check that we can receive it
+        // BUG: This actually allocates a new client
+        // So there is a DOS here where and attacker
+        // can send junk messages and overflow memory.
+        channel.state.check_receive(from, &message, &envlope_id)?;
+        
+        // -check the message on chat
+        let result = channel.chat.accept_message(channel_id.clone(), from, &message.data)?;
+        
+        // -receive it
+        //let max_sequance = channel.state.receive(from, &message, &envlope_id)?;
+        let Ok(max_sequance) = channel.state.receive(from, &message, &envlope_id) else {
+            return Err(ClientError::Unreachable); 
+        };
+
+        // - store the pub key for later
+        if let AcceptResult::AddUser(new_pub_key) = result {
+            let node_id = C::compute_id(&new_pub_key);
+            channel.state.add_node(node_id, new_pub_key)?;
+        }
+
+        // -store it
+        let message_count = channel.chat.message_count();
+        let mut slab_writer = channel.storage.get_writer()?;
+
+        slab_writer.write_record(max_sequance, message_count, &bytes)?;
         slab_writer.commit()?;
 
         Ok(())
