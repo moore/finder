@@ -1,11 +1,11 @@
 use super::*;
 
 use rand_chacha::rand_core::SeedableRng;
-use rsa::pkcs1v15::{SigningKey, VerifyingKey, Signature};
+use rsa::pkcs1v15::{Signature, SigningKey, VerifyingKey};
 use rsa::pkcs8::{EncodePrivateKey, EncodePublicKey};
+use rsa::signature::Verifier;
 use rsa::RsaPrivateKey;
 use rsa::RsaPublicKey;
-use rsa::signature::Verifier;
 
 use hkdf::Hkdf;
 use rand_chacha::ChaCha20Rng;
@@ -19,7 +19,7 @@ pub struct RustCrypto {
 }
 
 impl RustCrypto {
-    pub fn new( seed_bytes: &[u8]) -> Result<Self, CryptoError> {
+    pub fn new(seed_bytes: &[u8]) -> Result<Self, CryptoError> {
         // BUG: we should make a salt for this use
         let hk = Hkdf::<Sha256>::new(None, seed_bytes);
         let mut seed = [0u8; 32];
@@ -29,8 +29,8 @@ impl RustCrypto {
 
         let seed: <ChaCha20Rng as SeedableRng>::Seed = seed;
         let rng = ChaCha20Rng::from_seed(seed);
-  
-        Ok(Self{rng})
+
+        Ok(Self { rng })
     }
 }
 
@@ -88,7 +88,6 @@ impl Crypto for RustCrypto {
         message: &Message<T>,
         target: &mut [u8],
     ) -> Result<SealedEnvelope<T, MAX_ENVELOPE, MAX_SIG>, CryptoError> {
-
         let serialized = to_slice(message, target)?;
         let mut hasher = Sha256::new();
         hasher.update(&from.to_be_bytes());
@@ -126,13 +125,12 @@ impl Crypto for RustCrypto {
         key: &Self::PubSigningKey,
         sealed_envelope: &SealedEnvelope<T, MAX_ENVELOPE, MAX_SIG>,
     ) -> Result<Message<T>, CryptoError> {
-
         let mut hasher = Sha256::new();
         hasher.update(&sealed_envelope.from.to_be_bytes());
         hasher.update(&sealed_envelope.to.to_be_bytes());
         hasher.update(&sealed_envelope.serialized);
         let envelope_hash = hasher.finalize();
-   
+
         let verifying_key = VerifyingKey::<Sha256>::new(key.clone());
         let Ok(signature) = Signature::try_from(sealed_envelope.signature.as_ref()) else {
             return Err(CryptoError::InternalError);
@@ -141,7 +139,7 @@ impl Crypto for RustCrypto {
         verifying_key.verify(&envelope_hash, &signature)?;
 
         let opened = from_bytes(&sealed_envelope.serialized)?;
-        
+
         Ok(opened)
     }
 
@@ -149,7 +147,9 @@ impl Crypto for RustCrypto {
         self.rng.gen()
     }
 
-    fn make_signing_keys(&mut self) -> Result<KeyPair<Self::PrivateSigningKey, Self::PubSigningKey>, CryptoError> {
+    fn make_signing_keys(
+        &mut self,
+    ) -> Result<KeyPair<Self::PrivateSigningKey, Self::PubSigningKey>, CryptoError> {
         let bits = 2048;
 
         let private_key = RsaPrivateKey::new(&mut self.rng, bits)?;
@@ -160,10 +160,10 @@ impl Crypto for RustCrypto {
             private: private_key,
             public: public_key,
         };
-       
-       Ok(key_pair)
+
+        Ok(key_pair)
     }
-    
+
     fn channel_id_from_bytes(&self, data: &[u8]) -> ChannelId {
         let mut hasher = Sha256::new();
         hasher.update(data);
@@ -175,7 +175,6 @@ impl Crypto for RustCrypto {
         ChannelId::new(arr)
     }
 }
-
 
 #[cfg(test)]
 pub mod test;

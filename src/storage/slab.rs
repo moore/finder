@@ -9,7 +9,7 @@ pub struct Slab<'a> {
     slab_max_sequence: u64,
     // [count: u32][slab_max_sequence: u64][length:u32][data: [u8]]
     records: &'a [u8], // Record Data
-}   
+}
 
 impl<'a> Slab<'a> {
     pub fn new(data: &'a [u8], index: usize) -> Result<Self, StorageError> {
@@ -39,7 +39,7 @@ impl<'a> Slab<'a> {
 
     pub fn read(&self, mut cursor: Cursor) -> Result<Option<(Record<'a>, Cursor)>, StorageError> {
         if cursor.read_count >= self.record_count() {
-            return Ok(None)
+            return Ok(None);
         }
 
         let at = cursor.offset;
@@ -62,7 +62,9 @@ impl<'a> Slab<'a> {
         };
         let mut record: Record<'_> = from_bytes(slice)?;
         cursor.offset = end_offset;
-        cursor.read_count = cursor.read_count.checked_add(1)
+        cursor.read_count = cursor
+            .read_count
+            .checked_add(1)
             .ok_or(StorageError::Unreachable)?;
 
         Ok(Some((record, cursor)))
@@ -90,8 +92,17 @@ impl<'a, I: IO> SlabWriter<'a, I> {
         }
     }
 
-    pub fn write_record(&mut self, max_sequence: u64, message_count: u64, data: &[u8]) -> Result<(), StorageError> {
-        let record = Record { max_sequence, message_count, data };
+    pub fn write_record(
+        &mut self,
+        max_sequence: u64,
+        message_count: u64,
+        data: &[u8],
+    ) -> Result<(), StorageError> {
+        let record = Record {
+            max_sequence,
+            message_count,
+            data,
+        };
 
         if self.slab_max_sequence > record.max_sequence {
             return Err(StorageError::OutOfOrder);

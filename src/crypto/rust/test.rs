@@ -1,7 +1,7 @@
 use super::*;
 const SIG_SIZE: usize = 256;
 
-use rsa::pkcs1::{EncodeRsaPrivateKey, DecodeRsaPrivateKey, LineEnding};
+use rsa::pkcs1::{DecodeRsaPrivateKey, EncodeRsaPrivateKey, LineEnding};
 
 const PRIVATE_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEAt+15Q+QlwFThI33dHA4qCFSmX35CsJBOMKAAH8TzhoTl5TL+
@@ -33,15 +33,10 @@ BHm4I4zAJFmYCL/mBGIjhDI5q7YM7aHpQsDIIrx84vFbJqJfrJem
 ";
 
 pub fn get_test_keys() -> KeyPair<RsaPrivateKey, RsaPublicKey> {
-    let private = RsaPrivateKey::from_pkcs1_pem(PRIVATE_KEY)
-        .expect("error reading key");
+    let private = RsaPrivateKey::from_pkcs1_pem(PRIVATE_KEY).expect("error reading key");
     let public = private.to_public_key();
-    KeyPair {
-        private,
-        public,
-    }
+    KeyPair { private, public }
 }
-
 
 //#[test]
 fn test_make_keys() -> Result<(), ClientError> {
@@ -49,7 +44,7 @@ fn test_make_keys() -> Result<(), ClientError> {
     let seed = [0; 128];
     let mut crypto = RustCrypto::new(&seed)?;
     let key_pair = crypto.make_signing_keys()?;
-    
+
     // Used to dump key
     //let encoded =  key_pair.private.to_pkcs1_pem(LineEnding::default()).unwrap();
     //dbg!(encoded);
@@ -67,19 +62,20 @@ fn test_sign_verify() -> Result<(), ClientError> {
     let node2 = NodeId::new(2);
     let to = Recipient::Node(node2);
 
-    let mut state: ChannelState<3,RsaPublicKey> = ChannelState::new(node1, key_pair.public.clone())?;
+    let mut state: ChannelState<3, RsaPublicKey> =
+        ChannelState::new(node1, key_pair.public.clone())?;
 
     let envelope = state.address(node1, 0)?;
 
-    let mut target = [0u8 ; 4000];
-    let sealed_envelope: SealedEnvelope<i32, 1025, SIG_SIZE>= crypto.seal(node1, to, &key_pair, &envelope, &mut target)?;
+    let mut target = [0u8; 4000];
+    let sealed_envelope: SealedEnvelope<i32, 1025, SIG_SIZE> =
+        crypto.seal(node1, to, &key_pair, &envelope, &mut target)?;
 
     let opened = crypto.open(&key_pair.public, &sealed_envelope)?;
 
     assert_eq!(envelope, opened);
     Ok(())
 }
-
 
 #[test]
 fn test_envlope_id() -> Result<(), ClientError> {
@@ -91,12 +87,14 @@ fn test_envlope_id() -> Result<(), ClientError> {
     let node2 = NodeId::new(2);
     let to = Recipient::Node(node2);
 
-    let mut state: ChannelState<3,RsaPublicKey> = ChannelState::new(node1, key_pair.public.clone())?;
+    let mut state: ChannelState<3, RsaPublicKey> =
+        ChannelState::new(node1, key_pair.public.clone())?;
 
     let envelope = state.address(node1, 0)?;
 
-    let mut target = [0u8 ; 4000];
-    let sealed_envelope: SealedEnvelope<i32, 1025, SIG_SIZE>= crypto.seal(node1, to, &key_pair, &envelope, &mut target)?;
+    let mut target = [0u8; 4000];
+    let sealed_envelope: SealedEnvelope<i32, 1025, SIG_SIZE> =
+        crypto.seal(node1, to, &key_pair, &envelope, &mut target)?;
 
     let envlope_id1 = crypto.envelope_id(&sealed_envelope);
     let envlope_id2 = crypto.envelope_id(&sealed_envelope);
@@ -106,21 +104,18 @@ fn test_envlope_id() -> Result<(), ClientError> {
     state.add_node(node2, key_pair.public.clone());
 
     let envelope2 = state.address(node2, 0)?;
-    let sealed_envelope2: SealedEnvelope<i32, 1025, SIG_SIZE>= crypto.seal(node2, to, &key_pair, &envelope2, &mut target)?;
+    let sealed_envelope2: SealedEnvelope<i32, 1025, SIG_SIZE> =
+        crypto.seal(node2, to, &key_pair, &envelope2, &mut target)?;
 
     let envlope_id3 = crypto.envelope_id(&sealed_envelope2);
 
     assert_ne!(envlope_id1, envlope_id3);
 
-
     Ok(())
 }
 
-
-
 #[test]
 fn test_compute_id() -> Result<(), ClientError> {
-
     let key_pair = get_test_keys();
 
     let _device_id = RustCrypto::compute_id(&key_pair.public);

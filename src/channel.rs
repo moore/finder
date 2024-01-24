@@ -7,7 +7,7 @@ pub enum Recipient {
 }
 
 impl Recipient {
-    pub fn to_be_bytes(&self) -> [u8 ; SHA256_SIZE] {
+    pub fn to_be_bytes(&self) -> [u8; SHA256_SIZE] {
         match self {
             Recipient::Node(node_id) => node_id.to_be_bytes(),
             Recipient::Channel(channel_id) => channel_id.to_be_bytes(),
@@ -109,13 +109,10 @@ impl<const MAX_NODES: usize, P: Clone> ChannelState<MAX_NODES, P> {
     }
 
     pub fn add_node(&mut self, node: NodeId, node_key: P) -> Result<(), ChannelError> {
-
         let pos = self.nodes.binary_search_by_key(&node, |ns| ns.node);
 
         match pos {
-            Ok(index) => {
-                return Err(ChannelError::NodeExists)
-            }
+            Ok(index) => return Err(ChannelError::NodeExists),
 
             Err(index) => {
                 let record = NodeSequence {
@@ -140,14 +137,11 @@ impl<const MAX_NODES: usize, P: Clone> ChannelState<MAX_NODES, P> {
 
         match pos {
             Ok(index) => {
-                let record = self.nodes.get(index)
-                    .ok_or(ChannelError::Unreachable)?;
+                let record = self.nodes.get(index).ok_or(ChannelError::Unreachable)?;
                 Ok(record.public_key.clone())
             }
 
-            Err(index) => {
-                Err(ChannelError::UnknownNode)
-            }
+            Err(index) => Err(ChannelError::UnknownNode),
         }
     }
 
@@ -209,8 +203,7 @@ impl<const MAX_NODES: usize, P: Clone> ChannelState<MAX_NODES, P> {
             }
         };
 
-        let record = self.nodes.get(index)
-            .ok_or(ChannelError::Unreachable)?;
+        let record = self.nodes.get(index).ok_or(ChannelError::Unreachable)?;
 
         // check that the sequence last matches
         if record.sequence < message.sender_last {
@@ -263,9 +256,7 @@ impl<const MAX_NODES: usize, P: Clone> ChannelState<MAX_NODES, P> {
         let record = match pos {
             Ok(index) => &self.nodes[index],
 
-            Err(index) => {
-              return Err(ChannelError::UnknownNode)
-            }
+            Err(index) => return Err(ChannelError::UnknownNode),
         };
 
         let current = self.get_current()?;

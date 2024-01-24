@@ -1,5 +1,5 @@
-use core::mem::size_of;
 use ascon_hash::{AsconXof, ExtendableOutput, Update, XofReader};
+use core::mem::size_of;
 
 use super::*;
 pub mod mem_io;
@@ -59,7 +59,7 @@ pub struct Record<'a> {
     data: &'a [u8],
 }
 
-/* 
+/*
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DbInfo {
     root1_offset: usize,
@@ -81,7 +81,7 @@ pub struct DbRoot {
 
 impl DbRoot {
     pub fn new(generation: u64, data_start: usize, data_end: usize) -> Self {
-        let mut check_sum = 
+        let mut check_sum =
             DbRoot::compute_checksum(generation, data_start, data_end);
 
         Self {
@@ -94,8 +94,8 @@ impl DbRoot {
 
     pub fn validate(&self) -> Result<(), StorageError> {
         let computed = DbRoot::compute_checksum(
-            self.generation, 
-            self.data_start, 
+            self.generation,
+            self.data_start,
             self.data_end);
 
         if computed != self.check_sum {
@@ -142,7 +142,6 @@ where
         Storage { io }
     }
 
-
     pub fn get_cursor_from_sequence(&self, sequence: u64) -> Result<Option<Cursor>, StorageError> {
         let mut index = self.io.get_head()?;
 
@@ -176,7 +175,10 @@ where
         }
     }
 
-    pub fn get_cursor_from_index(&self, message_index: u64) -> Result<Option<Cursor>, StorageError> {
+    pub fn get_cursor_from_index(
+        &self,
+        message_index: u64,
+    ) -> Result<Option<Cursor>, StorageError> {
         let mut index = self.io.get_head()?;
 
         loop {
@@ -208,7 +210,6 @@ where
             }
         }
     }
-
 
     pub fn read<'a>(
         &'a self,

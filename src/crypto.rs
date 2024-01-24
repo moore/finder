@@ -15,7 +15,7 @@ pub struct Id {
 }
 
 impl Id {
-    fn to_be_bytes(&self) -> [u8 ; SHA256_SIZE] {
+    fn to_be_bytes(&self) -> [u8; SHA256_SIZE] {
         self.data.clone()
     }
 }
@@ -45,7 +45,7 @@ impl NodeId {
         Self(value.into())
     }
 
-    pub fn to_be_bytes(&self) -> [u8 ; SHA256_SIZE] {
+    pub fn to_be_bytes(&self) -> [u8; SHA256_SIZE] {
         self.0.to_be_bytes()
     }
 }
@@ -61,7 +61,7 @@ impl EnvelopeId {
         Self(value.into())
     }
 
-    pub fn to_be_bytes(&self) -> [u8 ; SHA256_SIZE] {
+    pub fn to_be_bytes(&self) -> [u8; SHA256_SIZE] {
         self.0.to_be_bytes()
     }
 }
@@ -77,7 +77,7 @@ impl ChannelId {
         Self(value.into())
     }
 
-    pub fn to_be_bytes(&self) -> [u8 ; SHA256_SIZE] {
+    pub fn to_be_bytes(&self) -> [u8; SHA256_SIZE] {
         self.0.to_be_bytes()
     }
 }
@@ -98,7 +98,12 @@ pub struct SealedEnvelope<T, const MAX_ENVELOPE: usize, const MAX_SIG: usize> {
 }
 
 impl<T, const MAX_ENVELOPE: usize, const MAX_SIG: usize> SealedEnvelope<T, MAX_ENVELOPE, MAX_SIG> {
-    pub fn new(from: NodeId, to: Recipient, serialized: &[u8], signature: &[u8]) -> Result<Self, CryptoError> {
+    pub fn new(
+        from: NodeId,
+        to: Recipient,
+        serialized: &[u8],
+        signature: &[u8],
+    ) -> Result<Self, CryptoError> {
         let Ok(data_vec) = Vec::from_slice(serialized) else {
             return Err(CryptoError::MaxEnvelope);
         };
@@ -121,7 +126,6 @@ impl<T, const MAX_ENVELOPE: usize, const MAX_SIG: usize> SealedEnvelope<T, MAX_E
     pub fn from(&self) -> NodeId {
         self.from
     }
-
 }
 
 #[derive(Debug)]
@@ -152,7 +156,13 @@ pub trait Crypto {
 
     fn compute_id(key: &Self::PubSigningKey) -> NodeId;
 
-    fn get_id<T: Serialize + for<'a> Deserialize<'a>, const MAX_ENVELOPE: usize, const MAX_SIG: usize>(sealed_envlope: &SealedEnvelope<T, MAX_ENVELOPE, MAX_SIG>) -> NodeId {
+    fn get_id<
+        T: Serialize + for<'a> Deserialize<'a>,
+        const MAX_ENVELOPE: usize,
+        const MAX_SIG: usize,
+    >(
+        sealed_envlope: &SealedEnvelope<T, MAX_ENVELOPE, MAX_SIG>,
+    ) -> NodeId {
         unimplemented!()
     }
 
@@ -161,7 +171,11 @@ pub trait Crypto {
         sealed: &SealedEnvelope<T, MAX_ENVELOPE, MAX_SIG>,
     ) -> EnvelopeId;
 
-    fn seal<T: Serialize + for<'a> Deserialize<'a>, const MAX_ENVELOPE: usize, const MAX_SIG: usize>(
+    fn seal<
+        T: Serialize + for<'a> Deserialize<'a>,
+        const MAX_ENVELOPE: usize,
+        const MAX_SIG: usize,
+    >(
         &self,
         from: NodeId,
         to: Recipient,
@@ -178,7 +192,9 @@ pub trait Crypto {
 
     fn nonce(&mut self) -> u128;
 
-    fn make_signing_keys(&mut self) -> Result<KeyPair<Self::PrivateSigningKey, Self::PubSigningKey>, CryptoError>;
+    fn make_signing_keys(
+        &mut self,
+    ) -> Result<KeyPair<Self::PrivateSigningKey, Self::PubSigningKey>, CryptoError>;
 
     fn channel_id_from_bytes(&self, data: &[u8]) -> ChannelId;
 }

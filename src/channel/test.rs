@@ -5,7 +5,7 @@ use rsa::RsaPublicKey;
 #[test]
 fn new_channel_state() -> Result<(), ChannelError> {
     let key_pair = get_test_keys();
-    let _state: ChannelState<3,RsaPublicKey> = ChannelState::new(NodeId::new(1), key_pair.public)?;
+    let _state: ChannelState<3, RsaPublicKey> = ChannelState::new(NodeId::new(1), key_pair.public)?;
     Ok(())
 }
 
@@ -17,7 +17,7 @@ fn address_envelope() -> Result<(), ChannelError> {
 
     let key_pair = get_test_keys();
 
-    let mut state: ChannelState<3,RsaPublicKey> = ChannelState::new(node1, key_pair.public)?;
+    let mut state: ChannelState<3, RsaPublicKey> = ChannelState::new(node1, key_pair.public)?;
 
     let envlope = state.address(node1, 0)?;
 
@@ -35,7 +35,7 @@ fn receive_envelope() -> Result<(), ChannelError> {
     let to = Recipient::Node(node2);
     let key_pair = get_test_keys();
 
-    let mut state: ChannelState<3,RsaPublicKey> = ChannelState::new(node1, key_pair.public)?;
+    let mut state: ChannelState<3, RsaPublicKey> = ChannelState::new(node1, key_pair.public)?;
 
     let envlope1 = state.address(node1, 0)?;
     let envlope1_id = EnvelopeId::new(1);
@@ -58,11 +58,11 @@ fn many_envelope() -> Result<(), ChannelError> {
 
     let key_pair = get_test_keys();
 
-    let mut state: ChannelState<3,RsaPublicKey> = ChannelState::new(node1, key_pair.public.clone())?;
+    let mut state: ChannelState<3, RsaPublicKey> =
+        ChannelState::new(node1, key_pair.public.clone())?;
 
     let envlope1 = state.address(node1, 0)?;
     let envlope1_id = EnvelopeId::new(1);
-
 
     state.receive::<i32>(node1, &envlope1, &envlope1_id)?;
 

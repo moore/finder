@@ -105,7 +105,9 @@ impl<'a, const MAX_USERS: usize, C: Crypto> Chat<MAX_USERS, C> {
                     return Err(ChatError::Unauthorized);
                 }
 
-                self.message_count = self.message_count.checked_add(1)
+                self.message_count = self
+                    .message_count
+                    .checked_add(1)
                     .ok_or(ChatError::Unreachable)?;
 
                 Ok(AcceptResult::NewMessage(self.message_count))

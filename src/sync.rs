@@ -10,10 +10,7 @@ pub struct Clock {
 
 impl Clock {
     pub fn new(node: NodeId, sequence: u64) -> Self {
-        Self {
-            node,
-            sequence,
-        }
+        Self { node, sequence }
     }
 }
 
@@ -24,12 +21,10 @@ pub struct SyncResponderState<const MAX_NODES: usize> {
     pub bytes_sent: u32,
     pub last_command_index: u64,
     pub vector_clock: Vec<Clock, MAX_NODES>,
-
 }
 
 impl<const MAX_NODES: usize> SyncResponderState<MAX_NODES> {
     pub fn get_min_sequence(&self) -> Option<u64> {
-
         let mut min = match self.vector_clock.get(0) {
             Some(clock) => clock.sequence,
             None => return None,
@@ -44,7 +39,6 @@ impl<const MAX_NODES: usize> SyncResponderState<MAX_NODES> {
         Some(min)
     }
 }
-
 
 #[derive(Debug)]
 pub struct SyncRequesterState {
