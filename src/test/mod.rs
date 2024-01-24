@@ -1,6 +1,9 @@
 
 use super::*;
 
+mod runner;
+use runner::*;
+
 use crypto::rust::{RustCrypto, test::get_test_keys};
 use storage::mem_io::MemIO;
 
@@ -8,6 +11,14 @@ const MEGA_BYTE: usize = 1024 * 1024;
 const SLAB_SIZE: usize = 1024;
 const MAX_CHANNELS: usize = 4;
 const MAX_NODES: usize = 128;
+
+
+#[test]
+fn test_runner_simple() -> Result<(), ClientError> {
+    let mut runner = TestRunner::new();
+    runner.run("simple.yaml")?;
+    Ok(())
+}
 
 #[test]
 fn test_init_chat() -> Result<(), ClientError> {

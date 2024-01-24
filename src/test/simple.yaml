@@ -1,0 +1,8 @@
+- !NewClient { id: 1, key: key1.rsa }
+- !NewClient { id: 2, key: key2.rsa }
+- !NewChannel { id: 1, from: 1 }
+- !SendMessage { channel: 1, from: 1, text: "hello" }
+- !AddClient {channel: 1, from: 1, client: 2 }
+- !Sync {channel: 1, requester: 2, responder: 1}
+- !CheckMessageCount { channel: 1, from: 2, count: 1 }
+
