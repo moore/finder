@@ -1,7 +1,7 @@
 use super::*;
 const SIG_SIZE: usize = 256;
 
-use rsa::pkcs1::{DecodeRsaPrivateKey, EncodeRsaPrivateKey, LineEnding};
+use rsa::pkcs1::{DecodeRsaPrivateKey};
 
 const PRIVATE_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEAt+15Q+QlwFThI33dHA4qCFSmX35CsJBOMKAAH8TzhoTl5TL+
@@ -43,7 +43,7 @@ fn test_make_keys() -> Result<(), ClientError> {
     // This is slooooooooooo uncomment to test
     let seed = [0; 128];
     let mut crypto = RustCrypto::new(&seed)?;
-    let key_pair = crypto.make_signing_keys()?;
+    let _key_pair = crypto.make_signing_keys()?;
 
     // Used to dump key
     //let encoded =  key_pair.private.to_pkcs1_pem(LineEnding::default()).unwrap();

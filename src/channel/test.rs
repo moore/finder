@@ -13,7 +13,6 @@ fn new_channel_state() -> Result<(), ChannelError> {
 fn address_envelope() -> Result<(), ChannelError> {
     let node1 = NodeId::new(1);
     let node2 = NodeId::new(2);
-    let to = Recipient::Node(node2);
 
     let key_pair = get_test_keys();
 
@@ -32,7 +31,7 @@ fn address_envelope() -> Result<(), ChannelError> {
 fn receive_envelope() -> Result<(), ChannelError> {
     let node1 = NodeId::new(1);
     let node2 = NodeId::new(2);
-    let to = Recipient::Node(node2);
+    let _to = Recipient::Node(node2);
     let key_pair = get_test_keys();
 
     let mut state: ChannelState<3, RsaPublicKey> = ChannelState::new(node1, key_pair.public)?;
@@ -54,7 +53,6 @@ fn many_envelope() -> Result<(), ChannelError> {
     let node1 = NodeId::new(1);
     let node2 = NodeId::new(2);
     let channel = ChannelId::new(3);
-    let to = Recipient::Channel(channel);
 
     let key_pair = get_test_keys();
 

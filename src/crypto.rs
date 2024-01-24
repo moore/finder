@@ -1,8 +1,8 @@
 use super::*;
 
-use rsa::sha2::Sha256;
-use rsa::RsaPrivateKey;
-use rsa::RsaPublicKey;
+
+
+
 
 pub const SHA256_SIZE: usize = 32; //bytes
 pub const RSA_KEY_SIZE: usize = 256; //bytes
@@ -145,7 +145,7 @@ impl From<postcard::Error> for CryptoError {
 }
 
 impl From<rsa::pkcs8::Error> for CryptoError {
-    fn from(value: rsa::pkcs8::Error) -> Self {
+    fn from(_value: rsa::pkcs8::Error) -> Self {
         CryptoError::InternalError
     }
 }
@@ -161,7 +161,7 @@ pub trait Crypto {
         const MAX_ENVELOPE: usize,
         const MAX_SIG: usize,
     >(
-        sealed_envlope: &SealedEnvelope<T, MAX_ENVELOPE, MAX_SIG>,
+        _sealed_envlope: &SealedEnvelope<T, MAX_ENVELOPE, MAX_SIG>,
     ) -> NodeId {
         unimplemented!()
     }

@@ -112,7 +112,7 @@ impl<const MAX_NODES: usize, P: Clone> ChannelState<MAX_NODES, P> {
         let pos = self.nodes.binary_search_by_key(&node, |ns| ns.node);
 
         match pos {
-            Ok(index) => return Err(ChannelError::NodeExists),
+            Ok(_index) => return Err(ChannelError::NodeExists),
 
             Err(index) => {
                 let record = NodeSequence {
@@ -141,7 +141,7 @@ impl<const MAX_NODES: usize, P: Clone> ChannelState<MAX_NODES, P> {
                 Ok(record.public_key.clone())
             }
 
-            Err(index) => Err(ChannelError::UnknownNode),
+            Err(_index) => Err(ChannelError::UnknownNode),
         }
     }
 
@@ -192,13 +192,13 @@ impl<const MAX_NODES: usize, P: Clone> ChannelState<MAX_NODES, P> {
         &mut self,
         from: NodeId,
         message: &Message<T>,
-        id: &EnvelopeId,
+        _id: &EnvelopeId,
     ) -> Result<usize, ChannelError> {
         let pos = self.nodes.binary_search_by_key(&from, |ns| ns.node);
 
         let index = match pos {
             Ok(index) => index,
-            Err(index) => {
+            Err(_index) => {
                 return Err(ChannelError::UnknownNode);
             }
         };
@@ -256,7 +256,7 @@ impl<const MAX_NODES: usize, P: Clone> ChannelState<MAX_NODES, P> {
         let record = match pos {
             Ok(index) => &self.nodes[index],
 
-            Err(index) => return Err(ChannelError::UnknownNode),
+            Err(_index) => return Err(ChannelError::UnknownNode),
         };
 
         let current = self.get_current()?;

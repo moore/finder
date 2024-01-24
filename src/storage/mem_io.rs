@@ -46,7 +46,6 @@ impl<'a, const SLAB_SIZE: usize> IO for MemIO<'a, SLAB_SIZE> {
     fn new_writer<'b>(&'b mut self) -> Result<SlabWriter<'b, Self>, StorageError> {
         // BUG: used checked math
         let start = self.start_offset + ((self.slab_count) * SLAB_SIZE);
-        let end = start + SLAB_SIZE;
 
         let writer = SlabWriter::new(self, start);
 
@@ -67,7 +66,7 @@ impl<'a, const SLAB_SIZE: usize> IO for MemIO<'a, SLAB_SIZE> {
     }
 
     fn write_record(&mut self, offset: usize, record: &Record) -> Result<usize, StorageError> {
-        let mut len_offset = offset;
+        let len_offset = offset;
         // BUG: what if usize is u64
         let offset = len_offset
             .checked_add(size_of::<u32>())

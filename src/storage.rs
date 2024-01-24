@@ -1,9 +1,9 @@
-use ascon_hash::{AsconXof, ExtendableOutput, Update, XofReader};
+use ascon_hash::{XofReader};
 use core::mem::size_of;
 
 use super::*;
 pub mod mem_io;
-use mem_io::*;
+
 
 mod slab;
 use slab::*;

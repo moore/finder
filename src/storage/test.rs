@@ -1,4 +1,5 @@
 use super::*;
+use crate::storage::mem_io::MemIO;
 
 #[test]
 fn test_mem_io_new() -> Result<(), StorageError> {
@@ -13,7 +14,7 @@ fn test_storage_new() -> Result<(), StorageError> {
     let mut data = [0; 4000];
     let io: MemIO<'_, 1000> = new_io(&mut data)?;
 
-    let storage = Storage::new(io);
+    let _storage = Storage::new(io);
 
     Ok(())
 }

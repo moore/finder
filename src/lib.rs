@@ -1,7 +1,7 @@
 #![no_std]
 
-use ascon_hash::digest::generic_array::sequence;
-use core::{cmp::max, marker::PhantomData, mem::size_of, ops::Deref};
+
+use core::{marker::PhantomData, mem::size_of};
 use heapless::{FnvIndexMap, String, Vec};
 
 use postcard::{from_bytes, to_slice};
@@ -45,7 +45,7 @@ enum ClientError {
 }
 
 impl From<GuardCellError> for ClientError {
-    fn from(value: GuardCellError) -> Self {
+    fn from(_value: GuardCellError) -> Self {
         ClientError::SafeStaticError
     }
 }
@@ -283,9 +283,9 @@ impl<'a, 'b, const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto
         count: u32,
     ) -> Result<(), ClientError> {
         let mut offset = 0;
-        let mut buffer = buffer;
+        let buffer = buffer;
         for _ in 0..count {
-            let mut len: u32;
+            let len: u32;
             (len, offset) = read_u32(buffer, offset)?;
             let end = offset + len as usize;
             let envelope_bytes = buffer
@@ -340,7 +340,7 @@ impl<'a, 'b, const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto
             .get_cursor_from_index(index)?
             .ok_or(ClientError::MessageIndexOutOfBounds)?;
 
-        let (bytes, cursor) = channel
+        let (bytes, _cursor) = channel
             .storage
             .read(cursor)?
             .ok_or(ClientError::Unreachable)?;
@@ -378,8 +378,8 @@ impl<'a, 'b, const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto
 
     pub fn remove_node(
         &mut self,
-        channel_id: &ChannelId,
-        node_id: &NodeId,
+        _channel_id: &ChannelId,
+        _node_id: &NodeId,
     ) -> Result<(), ClientError> {
         unimplemented!()
     }
@@ -398,7 +398,7 @@ impl<'a, 'b, const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto
     pub fn open_chat(&mut self, channel_id: ChannelId, io: I) -> Result<(), ClientError> {
         let my_id = C::compute_id(&self.key_pair.public);
 
-        let mut storage = Storage::new(io);
+        let storage = Storage::new(io);
         let mut channel =
             ChannelState::<MAX_NODES, C::PubSigningKey>::new(my_id, self.key_pair.public.clone())?;
 

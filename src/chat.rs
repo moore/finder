@@ -100,7 +100,7 @@ impl<'a, const MAX_USERS: usize, C: Crypto> Chat<MAX_USERS, C> {
                 self.add_user(&add_user.key)?;
                 Ok(AcceptResult::AddUser(add_user.key.clone()))
             }
-            Protocol::ChatMessage(chat_message) => {
+            Protocol::ChatMessage(_chat_message) => {
                 if !self.users.contains_key(&author) {
                     return Err(ChatError::Unauthorized);
                 }

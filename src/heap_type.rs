@@ -47,7 +47,7 @@ mod test {
     #[test]
     fn test_safe_static() {
         static test: GuardCell<[u8; 1000]> = GuardCell::wrap([0u8; 1000]);
-        let mut_ref = test.take_mut().expect("should have gotten ref");
+        let _mut_ref = test.take_mut().expect("should have gotten ref");
 
         test.take_mut()
             .expect_err("second takes should have failed");

@@ -1,5 +1,5 @@
 use super::*;
-use parking_lot::RawMutex;
+
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Slab<'a> {
@@ -60,7 +60,7 @@ impl<'a> Slab<'a> {
         let Some(slice) = self.records.get(offset..end_offset) else {
             return Ok(None);
         };
-        let mut record: Record<'_> = from_bytes(slice)?;
+        let record: Record<'_> = from_bytes(slice)?;
         cursor.offset = end_offset;
         cursor.read_count = cursor
             .read_count
