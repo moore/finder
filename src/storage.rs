@@ -17,12 +17,16 @@ pub enum StorageError {
     OutOfBounds,
     Unimplemented,
     PostcardError(postcard::Error),
+    SlabFull,
     OutOfOrder,
 }
 
 impl From<postcard::Error> for StorageError {
     fn from(value: postcard::Error) -> Self {
-        StorageError::PostcardError(value)
+        match value {
+            postcard::Error::SerializeBufferFull => Self::SlabFull,
+            _ => StorageError::PostcardError(value),
+        }
     }
 }
 
@@ -42,7 +46,7 @@ pub trait IO {
     fn new_writer<'a>(&'a mut self) -> Result<SlabWriter<'a, Self>, StorageError>
     where
         Self: Sized;
-    fn write_record(&mut self, offset: usize, record: &Record) -> Result<usize, StorageError>;
+    fn write_record(&mut self, offset: usize, end: usize, record: &Record) -> Result<usize, StorageError>;
     fn commit(
         &mut self,
         record_count: u32,
@@ -56,6 +60,8 @@ pub trait IO {
 pub struct Record<'a> {
     max_sequence: u64,
     message_count: u64,
+    sequence: u64,
+    sender: NodeId,
     data: &'a [u8],
 }
 
@@ -213,8 +219,9 @@ where
 
     pub fn read<'a>(
         &'a self,
-        mut cursor: Cursor,
+        cursor: Cursor,
     ) -> Result<Option<(&'a [u8], Cursor)>, StorageError> {
+        let mut cursor = cursor;
         let slab_index = cursor.slab;
         let slab = self.io.get_slab(slab_index)?;
 

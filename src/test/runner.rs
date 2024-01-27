@@ -22,6 +22,8 @@ const MEGA_BYTE: usize = 1024 * 1024;
 const SLAB_SIZE: usize = 1024;
 const MAX_CHANNELS: usize = 4;
 const MAX_NODES: usize = 128;
+const RESPONSE_MAX: usize = 4096;
+
 
 #[derive(Debug, Deserialize)]
 enum TestCommands {
@@ -94,22 +96,22 @@ impl TestRunner {
                     channel,
                     from,
                     text,
-                } => (),
+                } => self.send_message(channel, from, text)?,
                 AddClient {
                     channel,
                     from,
                     client,
-                } => (),
+                } => self.add_client(channel, from, client)?,
                 Sync {
                     channel,
                     requester,
                     responder,
-                } => (),
+                } => self.sync(channel, requester, responder)?,
                 CheckMessageCount {
                     channel,
                     from,
                     count,
-                } => (),
+                } => self.check_message_count(channel, from, count)?,
             };
         }
 
@@ -147,6 +149,122 @@ impl TestRunner {
         let channel_id_real = client.init_chat(name_str, io)?;
 
         self.channel_id_map.insert(channel_id, channel_id_real);
+
+        Ok(())
+    }
+
+    fn send_message(&mut self, channel_id: u64, from: u64, text: String) -> Result<(), ClientError> {
+        let client = self.clients.get_mut(&from).expect("could not get client");
+        let channel_id_real = self.channel_id_map.get(&channel_id)
+            .expect("no such channel");
+
+        client.send_message(channel_id_real, text.as_str())?;
+
+        Ok(())
+    }
+
+    fn add_client(&mut self, channel_id: u64, from: u64, to_add: u64) -> Result<(), ClientError> {
+        let channel_id_real = self.channel_id_map.get(&channel_id)
+            .expect("no such channel");
+    
+        let client = self.clients.get_mut(&from)
+            .expect("could not get client");
+
+        // BUG: this is wrong if there are users
+        // other than the owner who can add clients
+        let owner_key = client.get_pub_key();
+
+
+        let to_add = self.clients.get_mut(&to_add)
+            .expect("could not get client to add");
+
+        let pub_key = to_add.get_pub_key();
+
+        // This is a dance to allocate the buffer on the heap
+        // instead of allocating on the stack and moving to the heap
+        let mut vec_data = Vec::with_capacity(MEGA_BYTE);
+        vec_data.resize(MEGA_BYTE, 0u8);
+        let boxed_data: Box<[u8; MEGA_BYTE]> = vec_data.into_boxed_slice().try_into().unwrap();
+        let data = into_mut(boxed_data);
+        let io: MemIO<'_, SLAB_SIZE> = MemIO::new(data)?;
+        
+        to_add.add_channel(owner_key, channel_id_real.clone(), io)?;
+        
+        let client = self.clients.get_mut(&from)
+            .expect("could not get client");
+       
+       
+        client.add_node(channel_id_real, pub_key, "It's a name")?;
+
+        Ok(())
+    }
+
+    fn sync(&mut self, channel_id: u64, requester: u64, responder: u64) -> Result<(), ClientError> {
+        let channel_id_real = self.channel_id_map.get(&channel_id)
+            .expect("no such channel");
+        
+        let client = self.clients.get_mut(&requester)
+            .expect("could not get request client");
+        
+        let mut request = SyncRequest::<MAX_NODES> {
+            session_id: 0,
+            bytes_budget: 4096,
+            vector_clock: heapless::Vec::new(),
+        };
+
+        client.finish_sync_request(&channel_id_real, &mut request)
+            .expect("Could not finish request");
+
+        ///// send request over network
+
+        let client = self.clients.get_mut(&responder)
+        .expect("could not get response client");
+
+        let mut response_state = SyncResponderState::new(&request);
+
+        client.start_sync_response(&channel_id_real, &mut response_state, &request)
+            .expect("could not start_sync_response");
+
+        loop {
+            let client = self.clients.get_mut(&responder)
+                .expect("could not get response client");
+
+            let mut response = SyncResponse::<RESPONSE_MAX>::new(request.session_id);
+            let buffer = response.data.as_mut();
+            let (count, offset) = client.fill_send_buffer(&channel_id_real, &mut response_state, buffer)
+                .expect("Could not fill buffer");
+            if count == 0 {
+                break;
+            }
+
+            response.data.truncate(offset);
+            response.count = count;
+
+            ///// this is where the network transfer would happen
+
+            let client = self.clients.get_mut(&requester)
+                .expect("could not get request client");
+
+            let buffer = response.data.as_ref();
+            let count = response.count;
+            client.receive_buffer(&channel_id_real, buffer, count)
+                .expect("Could not receive buffer");
+
+            break; //BOOG
+        }
+        Ok(())
+    }
+
+
+    fn check_message_count(&mut self, channel_id: u64, from: u64, expected: u64) -> Result<(), ClientError> {
+        let client = self.clients.get_mut(&from)
+            .expect("could not get client");
+        let channel_id_real = self.channel_id_map.get(&channel_id)
+            .expect("no such channel");
+
+        let count = client.message_count(channel_id_real)?;
+
+        assert_eq!(count, expected);
 
         Ok(())
     }

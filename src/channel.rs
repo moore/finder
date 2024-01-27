@@ -52,6 +52,12 @@ pub struct Message<T> {
     pub(crate) data: T,
 }
 
+impl<T> Message<T> {
+    pub fn sequence(&self) -> u64 {
+        self.sequence
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub struct NodeSequence<P> {
     pub public_key: P,
@@ -204,9 +210,8 @@ impl<const MAX_NODES: usize, P: Clone> ChannelState<MAX_NODES, P> {
         };
 
         let record = self.nodes.get(index).ok_or(ChannelError::Unreachable)?;
-
         // check that the sequence last matches
-        if record.sequence < message.sender_last {
+        if record.sequence >= message.sequence {
             return Err(ChannelError::AlreadyReceived);
         } else if record.sequence != message.sender_last {
             return Err(ChannelError::MissingFromSender {

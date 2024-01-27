@@ -58,8 +58,9 @@ impl<'a> Slab<'a> {
             .ok_or(StorageError::CorruptDB)?;
 
         let Some(slice) = self.records.get(offset..end_offset) else {
-            return Ok(None);
+            return Err(StorageError::CorruptDB);
         };
+
         let record: Record<'_> = from_bytes(slice)?;
         cursor.offset = end_offset;
         cursor.read_count = cursor
@@ -76,18 +77,21 @@ pub struct SlabWriter<'a, I: IO> {
     slab_max_sequence: u64,
     slab_offset: usize,
     offset: usize,
+    end: usize,
     // [count: u32][slab_max_sequence: u64][length:u32][max_sequence: u64][data: [u8]]
     io: &'a mut I, // Record Data
 }
 
 impl<'a, I: IO> SlabWriter<'a, I> {
-    pub fn new(io: &'a mut I, offset: usize) -> SlabWriter<'a, I> {
+    pub fn new(io: &'a mut I, offset: usize, end: usize) -> SlabWriter<'a, I> {
         const INITIAL_OFFSET: usize = size_of::<u32>() + size_of::<u64>();
+        debug_assert!(INITIAL_OFFSET < (end - offset));
         Self {
             count: 0,
             slab_max_sequence: 0,
             slab_offset: offset,
             offset: offset + INITIAL_OFFSET,
+            end,
             io,
         }
     }
@@ -96,11 +100,15 @@ impl<'a, I: IO> SlabWriter<'a, I> {
         &mut self,
         max_sequence: u64,
         message_count: u64,
+        sequence: u64,
+        sender: NodeId,
         data: &[u8],
     ) -> Result<(), StorageError> {
         let record = Record {
             max_sequence,
             message_count,
+            sequence,
+            sender,
             data,
         };
 
@@ -108,8 +116,7 @@ impl<'a, I: IO> SlabWriter<'a, I> {
             return Err(StorageError::OutOfOrder);
         }
 
-        let end = self.io.write_record(self.offset, &record)?;
-
+        let end = self.io.write_record(self.offset, self.end, &record)?;
         // Update this first as it is the only
         // book keeping that can fail.
         self.count = self.count.checked_add(1).ok_or(StorageError::Unreachable)?;
