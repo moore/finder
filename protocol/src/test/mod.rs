@@ -23,16 +23,16 @@ fn test_init_chat() -> Result<(), ClientError> {
     let seed = [0; 128];
     let mut crypto = RustCrypto::new(&seed)?;
     let key_pair = get_test_keys();
-    static buffer: GuardCell<[u8; MEGA_BYTE]> = GuardCell::wrap([0u8; MEGA_BYTE]);
+    static buffer: StaticAllocation<[u8; MEGA_BYTE]> = StaticAllocation::wrap([0u8; MEGA_BYTE]);
     let data = buffer.take_mut()?;
     let io: MemIO<'_, SLAB_SIZE> = MemIO::new(data)?;
 
     //let mut client: Client<'_, MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto>
     //    = Client::new(key_pair, &mut crypto);
 
-    static channels_const: GuardCell<
+    static channels_const: StaticAllocation<
         ClientChannels<MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto>,
-    > = GuardCell::wrap(ClientChannels::new());
+    > = StaticAllocation::wrap(ClientChannels::new());
 
     let channels = channels_const.take_mut()?;
 
@@ -53,13 +53,13 @@ fn test_open_chat() -> Result<(), ClientError> {
     let key_pair = get_test_keys();
 
     let channel_id = {
-        static buffer: GuardCell<[u8; MEGA_BYTE]> = GuardCell::wrap([0u8; MEGA_BYTE]);
+        static buffer: StaticAllocation<[u8; MEGA_BYTE]> = StaticAllocation::wrap([0u8; MEGA_BYTE]);
         let data = buffer.take_mut()?;
         let io: MemIO<'_, SLAB_SIZE> = MemIO::new(data)?;
 
-        static channels_const: GuardCell<
+        static channels_const: StaticAllocation<
             ClientChannels<MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto>,
-        > = GuardCell::wrap(ClientChannels::new());
+        > = StaticAllocation::wrap(ClientChannels::new());
 
         let channels = channels_const.take_mut()?;
 
@@ -70,13 +70,13 @@ fn test_open_chat() -> Result<(), ClientError> {
         client.init_chat(name_str, io)?
     };
 
-    static buffer: GuardCell<[u8; MEGA_BYTE]> = GuardCell::wrap([0u8; MEGA_BYTE]);
+    static buffer: StaticAllocation<[u8; MEGA_BYTE]> = StaticAllocation::wrap([0u8; MEGA_BYTE]);
     let data = buffer.take_mut()?;
     let io: MemIO<'_, SLAB_SIZE> = MemIO::new(data)?;
 
-    static channels_const: GuardCell<
+    static channels_const: StaticAllocation<
         ClientChannels<MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto>,
-    > = GuardCell::wrap(ClientChannels::new());
+    > = StaticAllocation::wrap(ClientChannels::new());
 
     let channels = channels_const.take_mut()?;
 
@@ -96,13 +96,13 @@ fn test_send_message() -> Result<(), ClientError> {
     let seed = [0; 128];
     let mut crypto = RustCrypto::new(&seed)?;
     let key_pair = get_test_keys();
-    static buffer: GuardCell<[u8; MEGA_BYTE]> = GuardCell::wrap([0u8; MEGA_BYTE]);
+    static buffer: StaticAllocation<[u8; MEGA_BYTE]> = StaticAllocation::wrap([0u8; MEGA_BYTE]);
     let data = buffer.take_mut()?;
     let io: MemIO<'_, SLAB_SIZE> = MemIO::new(data)?;
 
-    static channels_const: GuardCell<
+    static channels_const: StaticAllocation<
         ClientChannels<MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto>,
-    > = GuardCell::wrap(ClientChannels::new());
+    > = StaticAllocation::wrap(ClientChannels::new());
 
     let channels = channels_const.take_mut()?;
 

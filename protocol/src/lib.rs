@@ -1,6 +1,5 @@
 #![no_std]
 
-
 use core::{marker::PhantomData, mem::size_of};
 use heapless::{FnvIndexMap, String, Vec};
 

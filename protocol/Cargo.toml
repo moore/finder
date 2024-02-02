@@ -6,11 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ascon-hash = { version = "0.2.0", features = []} 
+ascon-hash = { version = "0.2.0", default-features = false} 
+critical-section = "1.1.2"
 heapless = { version = "0.8.0", features = ["serde"] }
 hkdf = "0.12.4"
-once_cell = { version = "1.19.0", features = []}
-parking_lot = "0.12.1"
+once_cell = { version = "1.19.0", default-features = false}
+#parking_lot = "0.12.1"
 postcard = { version = "1.0.0" }
 rand = { version = "0.8.5", features = ["rand_chacha"], default-features = false }
 rand_chacha = { version = "0.3.1", default-features = false }
@@ -18,12 +19,14 @@ rsa = { version = "0.9.6", features = ["sha2", "serde", "pem"], default-features
 
 # By default, `serde` has the `std` feature enabled, which makes it unsuitable for embedded targets
 # disabling default-features fixes this
-serde = { version = "1.0.*", feadefault-features = false }
-serde_bytes = "0.11.14"
+serde = { version = "1.0.*", default-features = false, features = ["derive"] }
+serde_bytes = { version = "0.11.14", default-features = false }
 sha2 = { version = "0.10.8", default-features = false }
+
 
 [dev-dependencies]
 serde_yaml = "0.9"
+critical-section = { version = "1.1.2", features = ["std"]}
 
 [features]
 

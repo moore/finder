@@ -1,6 +1,7 @@
 use core::mem;
-use once_cell::unsync::OnceCell;
-use parking_lot::Mutex;
+use core::cell::RefCell;
+use critical_section::Mutex;
+use critical_section;
 
 #[derive(Debug)]
 pub enum GuardCellError {
@@ -8,33 +9,48 @@ pub enum GuardCellError {
     Unreachable,
 }
 
-pub struct GuardCell<T>(Mutex<OnceCell<T>>);
+pub struct GuardCell<T> {
+    taken: bool,
+    data: T,
+}
 
-impl<T> GuardCell<T>
+pub struct StaticAllocation<T>(Mutex<RefCell<GuardCell<T>>>);
+
+impl<T> StaticAllocation<T>
 where
     T: 'static,
 {
-    pub const fn wrap(inner: T) -> GuardCell<T> {
-        let cell = OnceCell::with_value(inner);
-        GuardCell::<T>(Mutex::new(cell))
+    pub const fn wrap(inner: T) -> StaticAllocation<T> {
+        let cell = GuardCell {
+            taken: false,
+            data: inner,
+        };
+        StaticAllocation(Mutex::new(RefCell::new(cell)))
     }
 
     pub fn take_mut(&'static self) -> Result<&'static mut T, GuardCellError> {
-        let GuardCell(inner) = self;
-        let mut guard = inner.try_lock().ok_or(GuardCellError::AlreadyUsed)?;
 
-        let src = guard.get_mut().ok_or(GuardCellError::Unreachable)?;
 
-        let result = unsafe {
-            // SAFETY: This is safe because `T` is defined as `'static`
-            // and we drop the guard so this can only be done once
-            // guaranteeing that only a single `&mut` exists to the
-            // allocation. Additionally there is no way to get at
-            // the underlying allocation other than this function.
-            mem::transmute::<&mut T, &'static mut T>(src)
-        };
+        let result = critical_section::with(|cs| {
+            let StaticAllocation(inner) = self;
+            let mut cell = inner.borrow(cs).borrow_mut();
 
-        mem::forget(guard);
+            if cell.taken {
+                return Err(GuardCellError::AlreadyUsed);
+            }
+
+            // SAFETY: THis is safe because of the taken guard
+            cell.taken = true;
+            
+
+            let result = unsafe {
+                // SAFETY: This is safe because `T` is defined as `'static`
+                // and the `taken` guard prevents taking more then once.
+                mem::transmute::<&mut T, &'static mut T>(&mut cell.data)
+            };
+
+            Ok(result)
+        })?; 
 
         Ok(result)
     }
@@ -46,7 +62,7 @@ mod test {
 
     #[test]
     fn test_safe_static() {
-        static test: GuardCell<[u8; 1000]> = GuardCell::wrap([0u8; 1000]);
+        static test: StaticAllocation<[u8; 1000]> = StaticAllocation::wrap([0u8; 1000]);
         let _mut_ref = test.take_mut().expect("should have gotten ref");
 
         test.take_mut()
