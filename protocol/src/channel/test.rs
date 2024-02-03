@@ -12,7 +12,6 @@ fn new_channel_state() -> Result<(), ChannelError> {
 #[test]
 fn address_envelope() -> Result<(), ChannelError> {
     let node1 = NodeId::new(1);
-    let node2 = NodeId::new(2);
 
     let key_pair = get_test_keys();
 
@@ -52,7 +51,6 @@ fn receive_envelope() -> Result<(), ChannelError> {
 fn many_envelope() -> Result<(), ChannelError> {
     let node1 = NodeId::new(1);
     let node2 = NodeId::new(2);
-    let channel = ChannelId::new(3);
 
     let key_pair = get_test_keys();
 
@@ -68,7 +66,7 @@ fn many_envelope() -> Result<(), ChannelError> {
 
     assert_eq!(record.id, envlope1_id);
 
-    state.add_node(node2, key_pair.public.clone());
+    state.add_node(node2, key_pair.public.clone())?;
 
     let envlope2 = state.address(node2, 0)?;
     let envlope2_id = EnvelopeId::new(2);

@@ -1,4 +1,4 @@
-use ascon_hash::{XofReader};
+//use ascon_hash::{XofReader};
 use core::mem::size_of;
 
 use super::*;
@@ -141,8 +141,8 @@ impl<I> Storage<I>
 where
     I: IO,
 {
-    const LENGTH_LENGTH: usize = 4;
-    const SEQUENCE_LENGTH: usize = 8;
+    //const LENGTH_LENGTH: usize = 4;
+    //const SEQUENCE_LENGTH: usize = 8;
 
     pub fn new<'a>(io: I) -> Self {
         Storage { io }

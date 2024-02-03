@@ -23,18 +23,18 @@ fn test_init_chat() -> Result<(), ClientError> {
     let seed = [0; 128];
     let mut crypto = RustCrypto::new(&seed)?;
     let key_pair = get_test_keys();
-    static buffer: StaticAllocation<[u8; MEGA_BYTE]> = StaticAllocation::wrap([0u8; MEGA_BYTE]);
-    let data = buffer.take_mut()?;
+    static BUFFER: StaticAllocation<[u8; MEGA_BYTE]> = StaticAllocation::wrap([0u8; MEGA_BYTE]);
+    let data = BUFFER.take_mut()?;
     let io: MemIO<'_, SLAB_SIZE> = MemIO::new(data)?;
 
     //let mut client: Client<'_, MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto>
     //    = Client::new(key_pair, &mut crypto);
 
-    static channels_const: StaticAllocation<
+    static CHANNELS_CONST: StaticAllocation<
         ClientChannels<MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto>,
     > = StaticAllocation::wrap(ClientChannels::new());
 
-    let channels = channels_const.take_mut()?;
+    let channels = CHANNELS_CONST.take_mut()?;
 
     let mut client: Client<'_, '_, MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto> =
         Client::new(key_pair, &mut crypto, channels);
@@ -48,20 +48,20 @@ fn test_init_chat() -> Result<(), ClientError> {
 
 #[test]
 fn test_open_chat() -> Result<(), ClientError> {
-    static seed: [u8; 128] = [0u8; 128];
-    let mut crypto = RustCrypto::new(&seed)?;
+    static SEED: [u8; 128] = [0u8; 128];
+    let mut crypto = RustCrypto::new(&SEED)?;
     let key_pair = get_test_keys();
 
     let channel_id = {
-        static buffer: StaticAllocation<[u8; MEGA_BYTE]> = StaticAllocation::wrap([0u8; MEGA_BYTE]);
-        let data = buffer.take_mut()?;
+        static BUFFER: StaticAllocation<[u8; MEGA_BYTE]> = StaticAllocation::wrap([0u8; MEGA_BYTE]);
+        let data = BUFFER.take_mut()?;
         let io: MemIO<'_, SLAB_SIZE> = MemIO::new(data)?;
 
-        static channels_const: StaticAllocation<
+        static CHANNELS_CONST: StaticAllocation<
             ClientChannels<MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto>,
         > = StaticAllocation::wrap(ClientChannels::new());
 
-        let channels = channels_const.take_mut()?;
+        let channels = CHANNELS_CONST.take_mut()?;
 
         let mut client: Client<'_, '_, MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto> =
             Client::new(key_pair.clone(), &mut crypto, channels);
@@ -70,15 +70,15 @@ fn test_open_chat() -> Result<(), ClientError> {
         client.init_chat(name_str, io)?
     };
 
-    static buffer: StaticAllocation<[u8; MEGA_BYTE]> = StaticAllocation::wrap([0u8; MEGA_BYTE]);
-    let data = buffer.take_mut()?;
+    static BUFFER: StaticAllocation<[u8; MEGA_BYTE]> = StaticAllocation::wrap([0u8; MEGA_BYTE]);
+    let data = BUFFER.take_mut()?;
     let io: MemIO<'_, SLAB_SIZE> = MemIO::new(data)?;
 
-    static channels_const: StaticAllocation<
+    static CHANNELS_CONST: StaticAllocation<
         ClientChannels<MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto>,
     > = StaticAllocation::wrap(ClientChannels::new());
 
-    let channels = channels_const.take_mut()?;
+    let channels = CHANNELS_CONST.take_mut()?;
 
     let mut client: Client<'_, '_, MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto> =
         Client::new(key_pair, &mut crypto, channels);
@@ -96,15 +96,15 @@ fn test_send_message() -> Result<(), ClientError> {
     let seed = [0; 128];
     let mut crypto = RustCrypto::new(&seed)?;
     let key_pair = get_test_keys();
-    static buffer: StaticAllocation<[u8; MEGA_BYTE]> = StaticAllocation::wrap([0u8; MEGA_BYTE]);
-    let data = buffer.take_mut()?;
+    static BUFFER: StaticAllocation<[u8; MEGA_BYTE]> = StaticAllocation::wrap([0u8; MEGA_BYTE]);
+    let data = BUFFER.take_mut()?;
     let io: MemIO<'_, SLAB_SIZE> = MemIO::new(data)?;
 
-    static channels_const: StaticAllocation<
+    static CHANNELS_CONST: StaticAllocation<
         ClientChannels<MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto>,
     > = StaticAllocation::wrap(ClientChannels::new());
 
-    let channels = channels_const.take_mut()?;
+    let channels = CHANNELS_CONST.take_mut()?;
 
     let mut client: Client<'_, '_, MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto> =
         Client::new(key_pair, &mut crypto, channels);

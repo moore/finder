@@ -4,8 +4,8 @@ use rand_chacha::rand_core::SeedableRng;
 use rsa::pkcs1v15::{Signature, SigningKey, VerifyingKey};
 use rsa::pkcs8::{EncodePrivateKey, EncodePublicKey};
 use rsa::signature::Verifier;
-use rsa::RsaPrivateKey;
-use rsa::RsaPublicKey;
+pub use rsa::RsaPrivateKey;
+pub use rsa::RsaPublicKey;
 
 use hkdf::Hkdf;
 use rand_chacha::ChaCha20Rng;

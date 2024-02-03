@@ -16,7 +16,7 @@ use rsa::RsaPublicKey;
 use core::mem;
 
 use super::*;
-use crate::crypto::{ChannelId, NodeId};
+use crate::crypto::ChannelId;
 
 const MEGA_BYTE: usize = 1024 * 1024;
 const SLAB_SIZE: usize = 1024;
@@ -58,7 +58,6 @@ enum TestCommands {
 }
 
 pub struct TestRunner {
-    client_id_map: HashMap<u64, NodeId>,
     channel_id_map: HashMap<u64, ChannelId>,
     clients: HashMap<
         u64,
@@ -76,7 +75,6 @@ pub struct TestRunner {
 impl TestRunner {
     pub fn new() -> Self {
         Self {
-            client_id_map: HashMap::new(),
             channel_id_map: HashMap::new(),
             clients: HashMap::new(),
         }

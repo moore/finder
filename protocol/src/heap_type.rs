@@ -62,10 +62,10 @@ mod test {
 
     #[test]
     fn test_safe_static() {
-        static test: StaticAllocation<[u8; 1000]> = StaticAllocation::wrap([0u8; 1000]);
-        let _mut_ref = test.take_mut().expect("should have gotten ref");
+        static TEST: StaticAllocation<[u8; 1000]> = StaticAllocation::wrap([0u8; 1000]);
+        let _mut_ref = TEST.take_mut().expect("should have gotten ref");
 
-        test.take_mut()
+        TEST.take_mut()
             .expect_err("second takes should have failed");
     }
 }

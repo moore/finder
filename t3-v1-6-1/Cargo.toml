@@ -6,6 +6,10 @@ edition = "2021"
 
 [profile.release]
 debug = true
+opt-level = "s"
+
+[profile.dev]
+opt-level = "s"
 
 [dependencies]
 esp32-hal = "0.18.0"
@@ -21,6 +25,7 @@ heapless = { version = "0.8.0", features = ["serde"] }
 
 protocol = { path = "../protocol"}
 esp-alloc = "0.3.0"
+rsa = { version = "0.9.6",  default-features = false}
 
 [features]
 default = ["esp32-hal/xtal-40mhz"]

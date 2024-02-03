@@ -6,29 +6,29 @@ use heapless::{FnvIndexMap, String, Vec};
 use postcard::{from_bytes, to_slice};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-mod channel;
+pub mod channel;
 use channel::*;
 
-mod storage;
+pub mod storage;
 use storage::*;
 
-mod chat;
+pub mod chat;
 use chat::*;
 
-mod crypto;
+pub mod crypto;
 use crypto::*;
 
-mod heap_type;
+pub mod heap_type;
 use heap_type::*;
 
-mod sync;
+pub mod sync;
 use sync::*;
 
 #[cfg(test)]
 mod test;
 
 #[derive(Debug)]
-enum ClientError {
+pub enum ClientError {
     SerializationError(postcard::Error),
     ChannelError(ChannelError),
     CryptoError(CryptoError),
@@ -80,7 +80,6 @@ impl From<StorageError> for ClientError {
 }
 
 pub struct Channel<const MAX_NODES: usize, I: IO, C: Crypto> {
-    id: ChannelId,
     state: ChannelState<MAX_NODES, C::PubSigningKey>,
     storage: Storage<I>,
     chat: Chat<MAX_NODES, C>,
@@ -103,7 +102,6 @@ impl<const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto>
 const MAX_SIG: usize = 256;
 const MAX_ENVELOPE: usize = 1024 - MAX_SIG;
 const LEN_SIZE: usize = size_of::<u32>();
-type RecordLength = u32;
 
 pub struct Client<'a, 'b, const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto> {
     crypto: &'a mut C,
@@ -148,7 +146,8 @@ impl<'a, 'b, const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto
 
         for node in nodes {
             let clock = Clock::new(node.node, node.sequence);
-            request.vector_clock.push(clock);
+            request.vector_clock.push(clock)
+                .map_err(|_| ClientError::Unreachable)?;
         }
 
         Ok(())
@@ -439,7 +438,6 @@ impl<'a, 'b, const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto
         }
 
         let full_channel = Channel {
-            id: channel_id.clone(),
             state: channel,
             storage,
             chat,
@@ -510,7 +508,6 @@ impl<'a, 'b, const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto
         slab_writer.commit()?;
 
         let full_channel = Channel {
-            id: channel_id.clone(),
             state: channel,
             storage,
             chat,
@@ -525,13 +522,12 @@ impl<'a, 'b, const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto
 
     pub fn add_channel(&mut self, from: C::PubSigningKey, channel_id: ChannelId, io: I) ->  Result<(), ClientError>  {
         let my_id = C::compute_id(&from);
-        let mut channel =
+        let channel =
             ChannelState::<MAX_NODES, C::PubSigningKey>::new(my_id, from)?;
-        let mut chat = Chat::<MAX_NODES, C>::new(channel_id.clone());
-        let mut storage = Storage::new(io);
+        let chat = Chat::<MAX_NODES, C>::new(channel_id.clone());
+        let storage = Storage::new(io);
 
         let full_channel = Channel {
-            id: channel_id.clone(),
             state: channel,
             storage,
             chat,

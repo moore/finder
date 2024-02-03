@@ -1,7 +1,7 @@
 use super::*;
 const SIG_SIZE: usize = 256;
 
-use rsa::pkcs1::{DecodeRsaPrivateKey};
+use rsa::pkcs1::DecodeRsaPrivateKey;
 
 const PRIVATE_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEAt+15Q+QlwFThI33dHA4qCFSmX35CsJBOMKAAH8TzhoTl5TL+
@@ -38,7 +38,8 @@ pub fn get_test_keys() -> KeyPair<RsaPrivateKey, RsaPublicKey> {
     KeyPair { private, public }
 }
 
-//#[test]
+/* 
+#[test]
 fn test_make_keys() -> Result<(), ClientError> {
     // This is slooooooooooo uncomment to test
     let seed = [0; 128];
@@ -51,7 +52,7 @@ fn test_make_keys() -> Result<(), ClientError> {
     //assert!(false);
     Ok(())
 }
-
+*/
 #[test]
 fn test_sign_verify() -> Result<(), ClientError> {
     let seed = [0; 128];
@@ -101,7 +102,7 @@ fn test_envlope_id() -> Result<(), ClientError> {
 
     assert_eq!(envlope_id1, envlope_id2);
 
-    state.add_node(node2, key_pair.public.clone());
+    state.add_node(node2, key_pair.public.clone())?;
 
     let envelope2 = state.address(node2, 0)?;
     let sealed_envelope2: SealedEnvelope<i32, 1025, SIG_SIZE> =
