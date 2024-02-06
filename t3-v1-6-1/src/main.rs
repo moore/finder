@@ -26,8 +26,10 @@ fn init_heap() {
     }
 }
 
+use critical_section;
 
 use protocol::{
+    wire,
     crypto::rust::{
         RsaPrivateKey,
         RsaPublicKey,
@@ -52,8 +54,24 @@ fn main() -> ! {
     init_heap();
 
     //////// init a protocol client //////
+    let peripherals = Peripherals::take();
 
-    let seed = [0; 128];
+    let mut rng = Rng::new(peripherals.RNG);
+
+    let mut seed = [0; 128];
+
+    critical_section::with(|_cs| {
+        // BUG: the docs for Rng say that I either
+        // need to have the radio on or use
+        // these to make sure I am really getting 
+        // random numbers but this seems to be a idf 
+        // thing. Do I really need to do it and if I do 
+        // how?
+        //???::bootloader_random_enable();
+        rng.read(&mut seed).unwrap();
+        //???::bootloader_random_disable();
+    });
+
     let mut crypto = RustCrypto::new(&seed).unwrap();
     let key_pair = get_test_keys();
     static BUFFER: StaticAllocation<[u8; MEGA_BYTE]> = StaticAllocation::wrap([0u8; MEGA_BYTE]);
@@ -77,7 +95,6 @@ fn main() -> ! {
 
     //// end protocol /////
 
-    let peripherals = Peripherals::take();
     let system = peripherals.SYSTEM.split();
 
     let clocks = ClockControl::max(system.clock_control).freeze();
@@ -93,7 +110,7 @@ fn main() -> ! {
     let init = initialize(
         EspWifiInitFor::Wifi,
         timer,
-        Rng::new(peripherals.RNG),
+        rng,
         system.radio_clock_control,
         &clocks,
     )
@@ -147,6 +164,7 @@ fn main() -> ! {
     }
     */
 }
+
 
 const PRIVATE_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEAt+15Q+QlwFThI33dHA4qCFSmX35CsJBOMKAAH8TzhoTl5TL+

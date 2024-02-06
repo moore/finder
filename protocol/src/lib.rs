@@ -24,6 +24,9 @@ use heap_type::*;
 pub mod sync;
 use sync::*;
 
+pub mod wire;
+use wire::*;
+
 #[cfg(test)]
 mod test;
 

@@ -1228,6 +1228,7 @@ dependencies = [
  "postcard",
  "rand",
  "rand_chacha",
+ "raptorq",
  "rsa",
  "serde",
  "serde_bytes",
@@ -1280,6 +1281,15 @@ name = "rand_core"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
+
+[[package]]
+name = "raptorq"
+version = "1.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c9cf9270cc5903afdef387f06ef1cd89fb77f45c357c2a425bae78b839fd866"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "regex"
@@ -1565,6 +1575,7 @@ dependencies = [
 name = "t3-v1-6-1"
 version = "0.1.0"
 dependencies = [
+ "critical-section",
  "embedded-io",
  "embedded-svc 0.26.4",
  "esp-alloc",
