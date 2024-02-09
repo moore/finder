@@ -42,6 +42,7 @@ use protocol::{
     ClientChannels,
 };
 
+
 use rsa::pkcs1::DecodeRsaPrivateKey;
 
 const MEGA_BYTE: usize = 1024 * 10; //* 1024;
@@ -58,6 +59,7 @@ fn main() -> ! {
 
     let mut rng = Rng::new(peripherals.RNG);
 
+    
     let mut seed = [0; 128];
 
     critical_section::with(|_cs| {
@@ -92,7 +94,7 @@ fn main() -> ! {
     let nodes = client.list_nodes(&channel_id).unwrap();
     //assert_eq!(nodes.len(), 1);
     println!("got {:?} nodes", nodes.len());
-
+    
     //// end protocol /////
 
     let system = peripherals.SYSTEM.split();
@@ -200,3 +202,5 @@ pub fn get_test_keys() -> KeyPair<RsaPrivateKey, RsaPublicKey> {
     let public = private.to_public_key();
     KeyPair { private, public }
 }
+
+

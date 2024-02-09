@@ -421,9 +421,6 @@ name = "raptorq"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c9cf9270cc5903afdef387f06ef1cd89fb77f45c357c2a425bae78b839fd866"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "rsa"
