@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 
 
 #[derive(Debug)]
-enum WireError {
+pub enum WireError {
     Unreachable,
     OutOfBounds,
     DeserializeError(postcard::Error),
@@ -53,7 +53,7 @@ pub enum NetworkProtocol<const MAX_CHANNELS: usize, const MAX_NODES: usize, cons
     SyncResponse(SyncResponse<RESPONSE_MAX>),
 }
 
-struct WireReader {
+pub struct WireReader {
     message_number: u16,
     transfer_length: u16,
     decoder: Decoder,
@@ -97,7 +97,7 @@ impl WireReader {
     }
 }
 
-struct WireWriter {
+pub struct WireWriter {
     message_number: u16,
     transfer_length: u16,
     encoded: Vec<EncodingPacket>,

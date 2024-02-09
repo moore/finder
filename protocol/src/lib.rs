@@ -25,7 +25,6 @@ pub mod sync;
 use sync::*;
 
 pub mod wire;
-use wire::*;
 
 #[cfg(test)]
 mod test;
@@ -299,7 +298,7 @@ impl<'a, 'b, const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto
                 // error and I think all this code should move in the the sync mod.
                 .ok_or(ClientError::Unreachable)?;
             offset = end;
-            match self.do_recieve(channel_id, envelope_bytes) {
+            match self.do_receive(channel_id, envelope_bytes) {
                 Ok(_) => (),
                 Err(ClientError::ChannelError(ChannelError::AlreadyReceived)) => (),
                 Err(err) => return Err(err),
@@ -420,12 +419,12 @@ impl<'a, 'b, const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto
                     MAX_ENVELOPE,
                     MAX_SIG,
                 > = from_bytes(data)?;
-                let envlope_id = self.crypto.envelope_id(&sealed_envelope);
+                let envelope_id = self.crypto.envelope_id(&sealed_envelope);
                 let from = sealed_envelope.from();
                 let pub_key = channel.get_node_key(from)?;
                 let message = self.crypto.open(&pub_key, &sealed_envelope)?;
 
-                channel.check_receive(from, &message, &envlope_id)?;
+                channel.check_receive(from, &message, &envelope_id)?;
 
                 let accept_result = chat.accept_message(channel_id, from, &message.data)?;
 
@@ -434,7 +433,7 @@ impl<'a, 'b, const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto
                     channel.add_node(node_id, new_pub_key)?;
                 }
 
-                if let Err(_) = channel.receive(from, &message, &envlope_id) {
+                if let Err(_) = channel.receive(from, &message, &envelope_id) {
                     return Err(ClientError::Unreachable);
                 }
             }
@@ -468,8 +467,8 @@ impl<'a, 'b, const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto
 
         let mut target = [0; 4096]; // BUG: should we take this as an argument?
 
-        let serlized = to_slice(&message, target.as_mut_slice())?;
-        let channel_id = self.crypto.channel_id_from_bytes(serlized);
+        let serialized = to_slice(&message, target.as_mut_slice())?;
+        let channel_id = self.crypto.channel_id_from_bytes(serialized);
 
         let my_id = C::compute_id(&self.key_pair.public);
         let mut channel =
@@ -493,21 +492,21 @@ impl<'a, 'b, const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto
             &mut target,
         )?;
 
-        let envlope_id = self.crypto.envelope_id(&sealed_envelope);
+        let envelope_id = self.crypto.envelope_id(&sealed_envelope);
         // -check that we can receive it
         // BUG: This actually allocates a new client
         // So there is a DOS here where and attacker
         // can send junk messages and overflow memory.
-        channel.check_receive(my_id, &message, &envlope_id)?;
+        channel.check_receive(my_id, &message, &envelope_id)?;
         // -check the message on chat
         chat.accept_message(channel_id.clone(), my_id, &message.data)?;
         // -receive it
-        let max_sequence = channel.receive(my_id, &message, &envlope_id)?;
+        let max_sequence = channel.receive(my_id, &message, &envelope_id)?;
         // -store it
         let message_count = chat.message_count();
         let mut slab_writer = storage.get_writer()?;
-        let serlized_envlope = to_slice(&sealed_envelope, target.as_mut_slice())?;
-        slab_writer.write_record(max_sequence, message_count, sequence, my_id, &serlized_envlope)?;
+        let serialized_envelope = to_slice(&sealed_envelope, target.as_mut_slice())?;
+        slab_writer.write_record(max_sequence, message_count, sequence, my_id, &serialized_envelope)?;
         slab_writer.commit()?;
 
         let full_channel = Channel {
@@ -568,12 +567,12 @@ impl<'a, 'b, const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto
             target.as_mut_slice(),
         )?;
 
-        let envlope_id = self.crypto.envelope_id(&envelope);
+        let envelope_id = self.crypto.envelope_id(&envelope);
         // -check that we can receive it
         // BUG: This actually allocates a new client
         // So there is a DOS here where and attacker
         // can send junk messages and overflow memory.
-        channel.state.check_receive(from, &message, &envlope_id)?;
+        channel.state.check_receive(from, &message, &envelope_id)?;
 
         // -check the message on chat
         let result = channel
@@ -581,8 +580,8 @@ impl<'a, 'b, const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto
             .accept_message(channel_id.clone(), from, &message.data)?;
 
         // -receive it
-        //let max_sequance = channel.state.receive(from, &message, &envlope_id)?;
-        let Ok(max_sequance) = channel.state.receive(from, &message, &envlope_id) else {
+        //let max_sequence = channel.state.receive(from, &message, &envelope_id)?;
+        let Ok(max_sequence) = channel.state.receive(from, &message, &envelope_id) else {
             return Err(ClientError::Unreachable);
         };
 
@@ -595,15 +594,15 @@ impl<'a, 'b, const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto
         // -store it
         let message_count = channel.chat.message_count();
         let mut slab_writer = channel.storage.get_writer()?;
-        let serlized_envlope = to_slice(&envelope, target.as_mut_slice())?;
+        let serialized_envelope = to_slice(&envelope, target.as_mut_slice())?;
 
-        slab_writer.write_record(max_sequance, message_count, sequence, from, &serlized_envlope)?;
+        slab_writer.write_record(max_sequence, message_count, sequence, from, &serialized_envelope)?;
         slab_writer.commit()?;
 
         Ok(())
     }
 
-    fn do_recieve(&mut self, channel_id: &ChannelId, bytes: &[u8]) -> Result<(), ClientError> {
+    fn do_receive(&mut self, channel_id: &ChannelId, bytes: &[u8]) -> Result<(), ClientError> {
         let sealed_envelope: SealedEnvelope<Protocol<C::PubSigningKey>, MAX_ENVELOPE, MAX_SIG> =
             from_bytes(bytes)?;
 
@@ -617,20 +616,20 @@ impl<'a, 'b, const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto
         let message = self.crypto.open(&key, &sealed_envelope)?;
         let sequence = message.sequence();
 
-        let envlope_id = self.crypto.envelope_id(&sealed_envelope);
+        let envelope_id = self.crypto.envelope_id(&sealed_envelope);
         // -check that we can receive it
         // BUG: This actually allocates a new client
         // So there is a DOS here where and attacker
         // can send junk messages and overflow memory.
-        channel.state.check_receive(from, &message, &envlope_id)?;
+        channel.state.check_receive(from, &message, &envelope_id)?;
         // -check the message on chat
         let result = channel
             .chat
             .accept_message(channel_id.clone(), from, &message.data)?;
 
         // -receive it
-        //let max_sequance = channel.state.receive(from, &message, &envlope_id)?;
-        let Ok(max_sequance) = channel.state.receive(from, &message, &envlope_id) else {
+        //let max_sequence = channel.state.receive(from, &message, &envelope_id)?;
+        let Ok(max_sequence) = channel.state.receive(from, &message, &envelope_id) else {
             return Err(ClientError::Unreachable);
         };
         // - store the pub key for later
@@ -642,7 +641,7 @@ impl<'a, 'b, const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto
         let message_count = channel.chat.message_count();
         let mut slab_writer = channel.storage.get_writer()?;
 
-        slab_writer.write_record(max_sequance, message_count, sequence, from, &bytes)?;
+        slab_writer.write_record(max_sequence, message_count, sequence, from, &bytes)?;
         slab_writer.commit()?;
 
         Ok(())
