@@ -1,10 +1,9 @@
 
 use crate::{
-    crypto::ChannelId,
-    sync::{
+    crypto::ChannelId, sync::{
         SyncRequest,
         SyncResponse,
-    },
+    }, NodeId
 };
 
 extern crate alloc;
@@ -45,7 +44,7 @@ pub struct ChannelInfo {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum NetworkProtocol<const MAX_CHANNELS: usize, const MAX_NODES: usize, const RESPONSE_MAX: usize> {
     Hello {
-        pub_key_id: [u8; 32],
+        pub_key_id: NodeId,
         peer_count: u8,
         channel_info: heapless::Vec<ChannelInfo, MAX_CHANNELS>,
     },

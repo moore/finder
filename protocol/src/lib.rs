@@ -133,6 +133,10 @@ impl<'a, 'b, const MAX_CHANNELS: usize, const MAX_NODES: usize, I: IO, C: Crypto
         self.key_pair.public.clone()
     }
 
+    pub fn get_node_id(&self) -> NodeId {
+        self.node_id
+    }
+
     pub fn finish_sync_request(
         &self,
         channel_id: &ChannelId,

@@ -10,15 +10,16 @@ use esp_println::println;
 
 use esp_wifi::esp_now::{PeerInfo, BROADCAST_ADDRESS};
 use esp_wifi::{current_millis, initialize, EspWifiInitFor};
+use protocol::crypto::Crypto;
 
-use core::mem::MaybeUninit;
+use core::mem::{size_of, size_of_val, MaybeUninit};
 extern crate alloc;
 
 #[global_allocator]
 static ALLOCATOR: esp_alloc::EspHeap = esp_alloc::EspHeap::empty();
+const HEAP_SIZE: usize = 64 * 1024;
 
 fn init_heap() {
-    const HEAP_SIZE: usize = 32 * 1024;
     static mut HEAP: MaybeUninit<[u8; HEAP_SIZE]> = MaybeUninit::uninit();
 
     unsafe {
@@ -27,33 +28,78 @@ fn init_heap() {
 }
 
 use critical_section;
+use heapless::Vec;
+use postcard::{from_bytes, to_slice};
 
 use protocol::{
-    wire,
-    crypto::rust::{
-        RsaPrivateKey,
-        RsaPublicKey,
-        RustCrypto,
+    wire::{
+        NetworkProtocol,
+        ChannelInfo,
+        WireWriter,
+        WireReader,
+    },
+    crypto::{
+        ChannelId,
+        rust::{
+            RsaPrivateKey,
+            RsaPublicKey,
+            RustCrypto,
+        }
     },
     crypto::KeyPair,
     heap_type::StaticAllocation,
-    storage::mem_io::MemIO,
+    storage::{
+        IO,
+        mem_io::MemIO,
+    },
     Client,
     ClientChannels,
 };
 
 
-use rsa::pkcs1::DecodeRsaPrivateKey;
+use rsa::pkcs1::{DecodeRsaPrivateKey, EncodeRsaPublicKey};
 
 const MEGA_BYTE: usize = 1024 * 10; //* 1024;
 const SLAB_SIZE: usize = 1024;
 const MAX_CHANNELS: usize = 4;
 const MAX_NODES: usize = 2;
+const ESP_NOW_MTU: u16 = 250;
+const MAX_RESPONSE: usize = 1024 * 10;
+const REPAIR_COUNT: u32 = 3;
+const WIFI_HEAP: usize = 65536;
+
+const MESSAGE_MAX: usize = size_of::<NetworkProtocol<MAX_CHANNELS, MAX_NODES, MAX_RESPONSE>>();
+
+static MESSAGE_BUFFER: StaticAllocation<[u8; MESSAGE_MAX]> = StaticAllocation::wrap([0u8 ; MESSAGE_MAX]);
+static MEMIO_BUFFER: StaticAllocation<[u8; MEGA_BYTE]> = StaticAllocation::wrap([0u8; MEGA_BYTE]);
+static CHANNELS_CONST: StaticAllocation<
+        ClientChannels<MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto>,
+    > = StaticAllocation::wrap(ClientChannels::new());
 
 #[entry]
 fn main() -> ! {
     init_heap();
 
+    // setup logger
+    // To change the log_level change the env section in .cargo/config.toml
+    // or remove it and set ESP_LOGLEVEL manually before running cargo run
+    // this requires a clean rebuild because of https://github.com/rust-lang/cargo/issues/10358
+    esp_println::logger::init_logger_from_env();
+    log::info!("Logger is setup");
+
+    log::info!("\n Heap size \t{}\n MESSAGE_BUFFER {}\n MEMIO_BUFFER \t{}\n CHANNELS_CONST {}\n WiFi Heap \t{}\nTotal \t\t{}", 
+    HEAP_SIZE, 
+    size_of_val(&MESSAGE_BUFFER),
+    size_of_val(&MEMIO_BUFFER),
+    size_of_val(&CHANNELS_CONST),
+    WIFI_HEAP,
+    HEAP_SIZE 
+    + size_of_val(&MESSAGE_BUFFER)
+    + size_of_val(&MEMIO_BUFFER)
+    + size_of_val(&CHANNELS_CONST)
+    + WIFI_HEAP,
+    );
+    
     //////// init a protocol client //////
     let peripherals = Peripherals::take();
 
@@ -76,14 +122,10 @@ fn main() -> ! {
 
     let mut crypto = RustCrypto::new(&seed).unwrap();
     let key_pair = get_test_keys();
-    static BUFFER: StaticAllocation<[u8; MEGA_BYTE]> = StaticAllocation::wrap([0u8; MEGA_BYTE]);
-    let data = BUFFER.take_mut().unwrap();
+    let data = MEMIO_BUFFER.take_mut().unwrap();
     let io: MemIO<'_, SLAB_SIZE> = MemIO::new(data).unwrap();
 
-    static CHANNELS_CONST: StaticAllocation<
-        ClientChannels<MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto>,
-    > = StaticAllocation::wrap(ClientChannels::new());
-
+    
     let channels = CHANNELS_CONST.take_mut().unwrap();
 
     let mut client: Client<'_, '_, MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto> =
@@ -93,21 +135,18 @@ fn main() -> ! {
     let channel_id = client.init_chat(name_str, io).unwrap();
     let nodes = client.list_nodes(&channel_id).unwrap();
     //assert_eq!(nodes.len(), 1);
-    println!("got {:?} nodes", nodes.len());
+    log::info!("got {} nodes", nodes.len());
     
+
+
     //// end protocol /////
 
     let system = peripherals.SYSTEM.split();
 
     let clocks = ClockControl::max(system.clock_control).freeze();
+    log::info!("got clock");
 
-    // setup logger
-    // To change the log_level change the env section in .cargo/config.toml
-    // or remove it and set ESP_LOGLEVEL manually before running cargo run
-    // this requires a clean rebuild because of https://github.com/rust-lang/cargo/issues/10358
-    esp_println::logger::init_logger_from_env();
-    log::info!("Logger is setup");
-    println!("Hello world!");
+
     let timer = TimerGroup::new(peripherals.TIMG1, &clocks).timer0;
     let init = initialize(
         EspWifiInitFor::Wifi,
@@ -118,16 +157,24 @@ fn main() -> ! {
     )
     .unwrap();
 
+    log::info!("got timer");
+
     let wifi = peripherals.WIFI;
     let mut esp_now = esp_wifi::esp_now::EspNow::new(&init, wifi).unwrap();
 
-    println!("esp-now version {}", esp_now.get_version().unwrap());
+    log::info!("esp-now version {} size {}", 
+        esp_now.get_version().unwrap(),
+        size_of_val(&esp_now));
 
+    let  message_buffer = MESSAGE_BUFFER.take_mut()
+        .expect("could not take message buffer");
+
+    let mut message_number: u16 = 0;
     let mut next_send_time = current_millis() + 5 * 1000;
     loop {
         let r = esp_now.receive();
         if let Some(r) = r {
-            println!("Received {:?}", r);
+            log::info!("Received {:?}", r);
 
             if r.info.dst_address == BROADCAST_ADDRESS {
                 if !esp_now.peer_exists(&r.info.src_address) {
@@ -144,29 +191,73 @@ fn main() -> ! {
                     .send(&r.info.src_address, b"Hello Peer")
                     .unwrap()
                     .wait();
-                println!("Send hello to peer status: {:?}", status);
+                log::info!("Send hello to peer status: {:?}", status);
             }
         }
 
         if current_millis() >= next_send_time {
             next_send_time = current_millis() + 5 * 1000;
-            println!("Send");
-            let status = esp_now
-                .send(&BROADCAST_ADDRESS, b"0123456789")
-                .unwrap()
-                .wait();
-            println!("Send broadcast status: {:?}", status)
+            log::info!("Send");
+            let hello: NetworkProtocol<MAX_CHANNELS, MAX_NODES, MAX_RESPONSE> 
+                = make_hello(0, channel_id, &client);
+
+            let written = to_slice(&hello, message_buffer)
+                .expect("could not write to buffer");
+
+            let mut writer = WireWriter::new(message_number, ESP_NOW_MTU, &written, REPAIR_COUNT);
+            message_number += 1;
+
+            for _ in 0..writer.packet_count() {
+                let mut buffer = [0u8 ; 250];
+
+                let len = writer.next(&mut buffer)
+                    .expect("could not write packet!");
+
+                let data = &buffer[0..len];
+
+                let status = esp_now
+                    .send(&BROADCAST_ADDRESS, data)
+                    .unwrap()
+                    .wait();
+                log::info!("Send broadcast status: {:?}", status)
+            }
         }
     }
 
     /*
     loop {
-        println!("Loop...");
+        log::info!("Loop...");
         delay.delay_ms(500u32);
     }
     */
 }
 
+
+fn make_hello<
+    const MAX_CHANNELS: usize, 
+    const MAX_NODES: usize,
+    const MAX_RESPONSE: usize,
+    I: IO,
+    P: Crypto,
+    >(peer_count: u8, channel_id: ChannelId, client: &Client<MAX_CHANNELS, MAX_NODES, I, P>) -> NetworkProtocol<MAX_CHANNELS, MAX_NODES, MAX_RESPONSE> {
+    let message_count = client.message_count(&channel_id)
+        .expect("could not get message count");
+
+    let info = ChannelInfo {
+        channel_id: channel_id.clone(),
+        message_count,
+    };
+    let mut channel_info = Vec::new();
+    channel_info.push(info).expect("too many channels");
+
+    let node_id = client.get_node_id();
+    
+     NetworkProtocol::Hello {
+        pub_key_id: node_id,
+        peer_count,
+        channel_info,
+     }
+}
 
 const PRIVATE_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEAt+15Q+QlwFThI33dHA4qCFSmX35CsJBOMKAAH8TzhoTl5TL+
