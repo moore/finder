@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-use esp32_hal::{
+use esp32s3_hal::{
     clock::ClockControl, peripherals::Peripherals, prelude::*, timer::TimerGroup, Rng,
 };
 
@@ -11,7 +11,6 @@ use esp_println::println;
 use esp_wifi::esp_now::{EspNow, PeerInfo, BROADCAST_ADDRESS};
 use esp_wifi::{current_millis, initialize, EspWifiInitFor};
 use protocol::crypto::Crypto;
-use protocol::wire::WireError;
 
 use core::mem::{size_of, size_of_val, MaybeUninit};
 extern crate alloc;
@@ -183,52 +182,10 @@ C: Crypto,
 
     let mut message_number: u16 = 0;
     let mut next_send_time = current_millis() + 5 * 1000;
-    let mut maybe_receiver = None;
     loop {
         let r = esp_now.receive();
         if let Some(r) = r {
             log::info!("Received {:?}", r);
-            if maybe_receiver.is_none() {
-                let Ok(receiver) = WireReader::new(r.get_data(), ESP_NOW_MTU) else {
-                    log::info!("Could not construct wire reader");
-                    continue;
-                };
-                maybe_receiver = Some(receiver);
-            }
-
-            let Some(ref mut receiver) = maybe_receiver else {
-                unreachable!("maybe_receiver empty after being set!!!")
-            };
-           
-            log::info!("receiver block {}, message len {} data len {}", receiver.message_number, receiver.transfer_length, r.get_data().len());
-
-            let data = r.get_data();
-            let result = match receiver.accept_packet(&data) {
-                Ok(r) => r,
-                Err(WireError::WrongBlock(found)) => {
-                    let Ok(mut receiver) = WireReader::new(&data, ESP_NOW_MTU) else {
-                        log::info!("Could not construct wire reader");
-                        continue;
-                    };
-                    let result = match receiver.accept_packet(&data) {
-                        Ok(r) => r,
-                        Err(e) => {
-                            log::info!("could not accept packet because {:?}", e);
-                            continue;
-                        }
-                    };
-                    maybe_receiver = Some(receiver);
-                    result
-                },
-                Err(e) => {
-                    log::info!("could not accept packet because {:?}", e);
-                    continue;
-                }
-            };
-
-            if let Some(value) = result {
-                log::info!("Got a result {:?}", value);
-            }
 
             if r.info.dst_address == BROADCAST_ADDRESS {
                 if !esp_now.peer_exists(&r.info.src_address) {
@@ -241,8 +198,7 @@ C: Crypto,
                         })
                         .unwrap();
                 }
-                /*
-                let status = esp_now
+                /* let status = esp_now
                     .send(&r.info.src_address, b"Hello Peer")
                     .unwrap()
                     .wait();
@@ -343,3 +299,60 @@ pub fn get_test_keys() -> KeyPair<RsaPrivateKey, RsaPublicKey> {
 }
 
 
+
+
+/* 
+#![no_std]
+#![no_main]
+
+extern crate alloc;
+use core::mem::MaybeUninit;
+use esp32s3_hal::{clock::ClockControl, peripherals::Peripherals, prelude::*, Delay};
+use esp_backtrace as _;
+use esp_println::println;
+
+use esp_wifi::{initialize, EspWifiInitFor};
+
+use esp32s3_hal::{timer::TimerGroup, Rng};
+#[global_allocator]
+static ALLOCATOR: esp_alloc::EspHeap = esp_alloc::EspHeap::empty();
+
+fn init_heap() {
+    const HEAP_SIZE: usize = 32 * 1024;
+    static mut HEAP: MaybeUninit<[u8; HEAP_SIZE]> = MaybeUninit::uninit();
+
+    unsafe {
+        ALLOCATOR.init(HEAP.as_mut_ptr() as *mut u8, HEAP_SIZE);
+    }
+}
+#[entry]
+fn main() -> ! {
+    init_heap();
+    let peripherals = Peripherals::take();
+    let system = peripherals.SYSTEM.split();
+
+    let clocks = ClockControl::max(system.clock_control).freeze();
+    let mut delay = Delay::new(&clocks);
+
+    // setup logger
+    // To change the log_level change the env section in .cargo/config.toml
+    // or remove it and set ESP_LOGLEVEL manually before running cargo run
+    // this requires a clean rebuild because of https://github.com/rust-lang/cargo/issues/10358
+    esp_println::logger::init_logger_from_env();
+    log::info!("Logger is setup");
+    println!("Hello world!");
+    let timer = TimerGroup::new(peripherals.TIMG1, &clocks).timer0;
+    let _init = initialize(
+        EspWifiInitFor::Wifi,
+        timer,
+        Rng::new(peripherals.RNG),
+        system.radio_clock_control,
+        &clocks,
+    )
+    .unwrap();
+    loop {
+        println!("Loop...");
+        delay.delay_ms(500u32);
+    }
+}
+*/

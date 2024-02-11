@@ -53,11 +53,14 @@ pub enum NetworkProtocol<const MAX_CHANNELS: usize, const MAX_NODES: usize, cons
 }
 
 pub struct WireReader {
-    message_number: u16,
-    transfer_length: u16,
+    pub message_number: u16, //BOOG
+    pub transfer_length: u16, //BOOG
     decoder: Decoder,
 }
 
+// BUG: We should check this to include a Error Correcting Code or Checksum.
+// this would reduce the block num to 1 byte and use the other byte for 
+// the checksum/ECC
 // Packet format: [2b block num][2b len][MTU - 4]
 impl WireReader {
     pub fn new(data: &[u8], mtu: u16) -> Result<Self, WireError> {
@@ -66,6 +69,7 @@ impl WireReader {
         let max_packet_size = mtu -4;
         let config = ObjectTransmissionInformation::with_defaults(transfer_length as u64, max_packet_size);
         let decoder = Decoder::new(config);
+
         Ok(Self{
             message_number,
             transfer_length,
