@@ -25,6 +25,7 @@ pub enum WireError {
     OutOfBounds,
     DeserializeError(postcard::Error),
     WrongBlock(u16),
+    NotPacket,
 }
 
 impl From<postcard::Error> for WireError {
@@ -58,15 +59,21 @@ pub struct WireReader {
     decoder: Decoder,
 }
 
-// BUG: We should check this to include a Error Correcting Code or Checksum.
-// this would reduce the block num to 1 byte and use the other byte for 
-// the checksum/ECC
-// Packet format: [2b block num][2b len][MTU - 4]
+// NOTE: We assume that there is a checksum and or error correction in layer 0
+// so here we just have a label `0xa9f4` to check that is is a packet
+// in the expected format.
+// Packet format: [0xa9f4][2b block num][2b len][MTU - 6]
 impl WireReader {
     pub fn new(data: &[u8], mtu: u16) -> Result<Self, WireError> {
-        let (message_number, offset) = read_u16(data, 0)?;
+        let (label , offset) = read_u16(data, 0)?;
+
+        if label != 0xa9f4 {
+            return Err(WireError::NotPacket);
+        }
+
+        let (message_number, offset) = read_u16(data, offset)?;
         let (transfer_length, _offset) = read_u16(data, offset)?;
-        let max_packet_size = mtu -4;
+        let max_packet_size = mtu - 6;
         let config = ObjectTransmissionInformation::with_defaults(transfer_length as u64, max_packet_size);
         let decoder = Decoder::new(config);
 
@@ -78,7 +85,12 @@ impl WireReader {
     }
 
     pub fn accept_packet(&mut self, data: &[u8]) -> Result<Option<Vec<u8>>, WireError> {
-        let (message_number, offset) = read_u16(data, 0)?;
+        let (label , offset) = read_u16(data, 0)?;
+
+        if label != 0xa9f4 {
+            return Err(WireError::NotPacket);
+        }
+        let (message_number, offset) = read_u16(data, offset)?;
         let (transfer_length, offset) = read_u16(data, offset)?;
 
         // We assume that if the either the `message_number` or `transfer_length`
@@ -100,7 +112,13 @@ impl WireReader {
     }
 
     pub fn check_packet(data: &[u8]) -> Result<u16, WireError> {
-        let (message_number, offset) = read_u16(data, 0)?;
+        let (label , offset) = read_u16(data, 0)?;
+
+        if label != 0xa9f4 {
+            return Err(WireError::NotPacket);
+        }
+
+        let (message_number, _offset) = read_u16(data, offset)?;
         Ok(message_number)
     }
 }
@@ -120,7 +138,7 @@ impl WireWriter {
             panic!("data is too long");
         }
 
-        let adjusted_mtu = mtu - 4; //[u16 ]+[u16]
+        let adjusted_mtu = mtu - 6; //[0xa9f4][u16]+[u16]
         let encoder = Encoder::with_defaults(data, adjusted_mtu);
         let encoded =  encoder.get_encoded_packets(repair_packets_per_block);
         Self {
@@ -141,7 +159,8 @@ impl WireWriter {
         self.last_sent = self.last_sent.wrapping_add(1);
 
         let index = self.last_sent % self.encoded.len();
-        let offset = write_u16(self.message_number, buffer, 0)?;
+        let offset = write_u16(0xa9f4, buffer, 0)?;
+        let offset = write_u16(self.message_number, buffer, offset)?;
         let offset = write_u16(self.transfer_length, buffer, offset)?;
 
         let target = buffer.get_mut(offset..)
@@ -156,7 +175,7 @@ impl WireWriter {
         let wrote = encoding.serialize();
         target[0..wrote.len()].copy_from_slice(&wrote);
 
-        let wrote_length = 4 + wrote.len();
+        let wrote_length = 6 + wrote.len();
 
         Ok(wrote_length)
     }
