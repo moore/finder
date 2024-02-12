@@ -184,11 +184,28 @@ C: Crypto,
     let mut message_number: u16 = 0;
     let mut next_send_time = current_millis() + 5 * 1000;
     let mut maybe_receiver = None;
+    let mut last_completed = None;
     loop {
         let r = esp_now.receive();
         if let Some(r) = r {
+            let data: &[u8] = r.get_data();
+
+            let received_message_number = match WireReader::check_packet(data) {
+                Ok(number) => number,
+                Err(e) => {
+                    log::info!("check packet failed {:?}", e);
+                    continue;
+                }
+                
+            };
+
+            if let Some(finished) = last_completed {
+                if received_message_number == finished {
+                    continue;
+                }
+            }
             if maybe_receiver.is_none() {
-                let Ok(receiver) = WireReader::new(r.get_data(), ESP_NOW_MTU) else {
+                let Ok(receiver) = WireReader::new(data, ESP_NOW_MTU) else {
                     log::info!("Could not construct wire reader");
                     continue;
                 };
@@ -201,7 +218,6 @@ C: Crypto,
            
             log::info!("receiver block {}, message len {} data len {}", receiver.message_number, receiver.transfer_length, r.get_data().len());
 
-            let data = r.get_data();
             let result = match receiver.accept_packet(&data) {
                 Ok(r) => r,
                 Err(WireError::WrongBlock(_found)) => {
@@ -228,6 +244,7 @@ C: Crypto,
             if let Some(value) = result {
                 let command: NetworkProtocol<MAX_CHANNELS, MAX_NODES, MAX_RESPONSE> = from_bytes(&value)
                     .expect("could not parse message");
+                last_completed = Some(received_message_number);
                 log::info!("Got a result {:?}", command);
             }
 

@@ -98,6 +98,11 @@ impl WireReader {
 
         Ok(Some(received))
     }
+
+    pub fn check_packet(data: &[u8]) -> Result<u16, WireError> {
+        let (message_number, offset) = read_u16(data, 0)?;
+        Ok(message_number)
+    }
 }
 
 pub struct WireWriter {
