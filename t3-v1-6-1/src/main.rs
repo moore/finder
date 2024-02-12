@@ -187,7 +187,6 @@ C: Crypto,
     loop {
         let r = esp_now.receive();
         if let Some(r) = r {
-            log::info!("Received {:?}", r);
             if maybe_receiver.is_none() {
                 let Ok(receiver) = WireReader::new(r.get_data(), ESP_NOW_MTU) else {
                     log::info!("Could not construct wire reader");
@@ -205,7 +204,7 @@ C: Crypto,
             let data = r.get_data();
             let result = match receiver.accept_packet(&data) {
                 Ok(r) => r,
-                Err(WireError::WrongBlock(found)) => {
+                Err(WireError::WrongBlock(_found)) => {
                     let Ok(mut receiver) = WireReader::new(&data, ESP_NOW_MTU) else {
                         log::info!("Could not construct wire reader");
                         continue;
@@ -227,7 +226,9 @@ C: Crypto,
             };
 
             if let Some(value) = result {
-                log::info!("Got a result {:?}", value);
+                let command: NetworkProtocol<MAX_CHANNELS, MAX_NODES, MAX_RESPONSE> = from_bytes(&value)
+                    .expect("could not parse message");
+                log::info!("Got a result {:?}", command);
             }
 
             if r.info.dst_address == BROADCAST_ADDRESS {
