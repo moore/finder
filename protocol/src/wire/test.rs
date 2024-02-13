@@ -1,5 +1,8 @@
 use super::*;
 
+extern crate alloc;
+use alloc::vec::Vec;
+
 #[test]
 fn write_read() -> Result<(), WireError> {
     let mut message = [0u8 ; 1024];

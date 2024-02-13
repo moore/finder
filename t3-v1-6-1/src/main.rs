@@ -10,16 +10,14 @@ use esp_println::println;
 
 use esp_wifi::esp_now::{EspNow, PeerInfo, BROADCAST_ADDRESS};
 use esp_wifi::{current_millis, initialize, EspWifiInitFor};
-use protocol::crypto::Crypto;
-use protocol::wire::WireError;
 
 use core::mem::{size_of, size_of_val, MaybeUninit};
 extern crate alloc;
 
 #[global_allocator]
 static ALLOCATOR: esp_alloc::EspHeap = esp_alloc::EspHeap::empty();
-const HEAP_SIZE: usize = 64 * 1024;
 
+const HEAP_SIZE: usize = 64 * 1024;
 fn init_heap() {
     static mut HEAP: MaybeUninit<[u8; HEAP_SIZE]> = MaybeUninit::uninit();
 
@@ -38,8 +36,10 @@ use protocol::{
         ChannelInfo,
         WireWriter,
         WireReader,
+        WireError,
     },
     crypto::{
+        Crypto,
         ChannelId,
         rust::{
             RsaPrivateKey,
@@ -116,6 +116,8 @@ fn main() -> ! {
         // random numbers but this seems to be a idf 
         // thing. Do I really need to do it and if I do 
         // how?
+        // I do see in the boot logs that this was turned 
+        // on for a bit. Was that enough?
         //???::bootloader_random_enable();
         rng.read(&mut seed).unwrap();
         //???::bootloader_random_disable();
