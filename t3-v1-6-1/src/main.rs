@@ -10,6 +10,7 @@ use esp_println::println;
 
 use esp_wifi::esp_now::{EspNow, PeerInfo, BROADCAST_ADDRESS};
 use esp_wifi::{current_millis, initialize, EspWifiInitFor};
+use protocol::wire::WireState;
 
 use core::mem::{size_of, size_of_val, MaybeUninit};
 extern crate alloc;
@@ -183,78 +184,23 @@ C: Crypto,
     let  message_buffer = MESSAGE_BUFFER.take_mut()
     .expect("could not take message buffer");
 
-    let mut message_number: u16 = 0;
-    let mut next_send_time = current_millis() + 5 * 1000;
-    let mut maybe_receiver = None;
-    let mut last_completed = None;
+    //let mut message_number: u16 = 0;
+    //let mut next_send_time = current_millis() + 5 * 1000;
+    //let mut maybe_receiver = None;
+    //let mut last_completed = None;
+    let channel_ids = [channel_id; 1];
+
+    let mut state: WireState<MAX_CHANNELS, MAX_NODES, MAX_RESPONSE, I, C, [u8; 6]> = WireState::new(ESP_NOW_MTU);
+
     loop {
         let r = esp_now.receive();
         if let Some(r) = r {
-            let data: &[u8] = r.get_data();
-
-            let received_message_number = match WireReader::check_packet(data) {
-                Ok(number) => number,
-                Err(e) => {
-                    log::info!("check packet failed {:?}", e);
-                    continue;
-                }
-                
-            };
-
-            if let Some(finished) = last_completed {
-                if received_message_number == finished {
-                    continue;
-                }
-            }
-            if maybe_receiver.is_none() {
-                let Ok(receiver) = WireReader::new(data, ESP_NOW_MTU) else {
-                    log::info!("Could not construct wire reader");
-                    continue;
-                };
-                maybe_receiver = Some(receiver);
-            }
-
-            let Some(ref mut receiver) = maybe_receiver else {
-                unreachable!("maybe_receiver empty after being set!!!")
-            };
-           
-            log::info!("receiver block {}, message len {} data len {}", receiver.message_number, receiver.transfer_length, r.get_data().len());
-
-            let result = match receiver.accept_packet(&data) {
-                Ok(r) => r,
-                Err(WireError::WrongBlock(_found)) => {
-                    let Ok(mut receiver) = WireReader::new(&data, ESP_NOW_MTU) else {
-                        log::info!("Could not construct wire reader");
-                        continue;
-                    };
-                    let result = match receiver.accept_packet(&data) {
-                        Ok(r) => r,
-                        Err(e) => {
-                            log::info!("could not accept packet because {:?}", e);
-                            continue;
-                        }
-                    };
-                    maybe_receiver = Some(receiver);
-                    result
-                },
-                Err(e) => {
-                    log::info!("could not accept packet because {:?}", e);
-                    continue;
-                }
-            };
-
-            if let Some(value) = result {
-                let command: NetworkProtocol<MAX_CHANNELS, MAX_NODES, MAX_RESPONSE> = from_bytes(&value)
-                    .expect("could not parse message");
-                last_completed = Some(received_message_number);
-                log::info!("Got a result {:?}", command);
-            }
-
+            let from = r.info.src_address;
             if r.info.dst_address == BROADCAST_ADDRESS {
                 if !esp_now.peer_exists(&r.info.src_address) {
                     esp_now
                         .add_peer(PeerInfo {
-                            peer_address: r.info.src_address,
+                            peer_address: from.clone(),
                             lmk: None,
                             channel: None,
                             encrypt: false,
@@ -269,20 +215,24 @@ C: Crypto,
                 log::info!("Send hello to peer status: {:?}", status);
                 */
             }
+
+            let data: &[u8] = r.get_data();
+
+            if let Err(e) = state.receive_packet(data, from) {
+                log::debug!("error receiving packet {:?}", e);
+                continue;
+            }
         }
 
-        if current_millis() >= next_send_time {
-            next_send_time = current_millis() + 5 * 1000;
-            log::info!("Send");
-            let hello: NetworkProtocol<MAX_CHANNELS, MAX_NODES, MAX_RESPONSE> 
-                = make_hello(0, channel_id, &client);
+        let now = current_millis();
+        let peer_count = esp_now.peer_count()
+            .expect("could not get peer count")
+            .total_count as u8; // it returns i32 but the max is 20 something
 
-            let written = to_slice(&hello, message_buffer)
-                .expect("could not write to buffer");
+        let result = state.poll(message_buffer, now, peer_count, &channel_ids, REPAIR_COUNT, client)
+            .expect("poll returned Err");
 
-            let mut writer = WireWriter::new(message_number, ESP_NOW_MTU, &written, REPAIR_COUNT);
-            message_number += 1;
-
+        if let Some(mut writer) = result.writer {
             for _ in 0..writer.packet_count() {
                 let mut buffer = [0u8 ; 250];
 
@@ -299,32 +249,6 @@ C: Crypto,
             }
         }
     }
-}
-
-fn make_hello<
-    const MAX_CHANNELS: usize, 
-    const MAX_NODES: usize,
-    const MAX_RESPONSE: usize,
-    I: IO,
-    P: Crypto,
-    >(peer_count: u8, channel_id: ChannelId, client: &Client<MAX_CHANNELS, MAX_NODES, I, P>) -> NetworkProtocol<MAX_CHANNELS, MAX_NODES, MAX_RESPONSE> {
-    let message_count = client.message_count(&channel_id)
-        .expect("could not get message count");
-
-    let info = ChannelInfo {
-        channel_id: channel_id.clone(),
-        message_count,
-    };
-    let mut channel_info = Vec::new();
-    channel_info.push(info).expect("too many channels");
-
-    let node_id = client.get_node_id();
-    
-     NetworkProtocol::Hello {
-        pub_key_id: node_id,
-        peer_count,
-        channel_info,
-     }
 }
 
 const PRIVATE_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----

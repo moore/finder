@@ -1224,6 +1224,7 @@ dependencies = [
  "critical-section",
  "heapless 0.8.0",
  "hkdf",
+ "log",
  "once_cell",
  "postcard",
  "rand",
