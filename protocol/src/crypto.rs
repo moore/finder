@@ -1,15 +1,13 @@
 use super::*;
 
-
-
-
+use core::fmt;
 
 pub const SHA256_SIZE: usize = 32; //bytes
 pub const RSA_KEY_SIZE: usize = 256; //bytes
 
 pub mod rust;
 
-#[derive(Debug, Hash, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Hash, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Id {
     pub data: [u8; SHA256_SIZE],
 }
@@ -18,6 +16,16 @@ impl Id {
     fn to_be_bytes(&self) -> [u8; SHA256_SIZE] {
         self.data.clone()
     }
+}
+
+impl fmt::Debug for Id {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Id: ")?;
+        for b in &self.data {
+            write!(f, "{:x?}", *b)?;
+        }
+        Ok(())
+    }    
 }
 
 impl From<u8> for Id {
@@ -66,8 +74,18 @@ impl EnvelopeId {
     }
 }
 
-#[derive(Debug, Hash, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Hash, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ChannelId(Id);
+
+impl fmt::Debug for ChannelId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("ChannelId: ")?;
+        for b in &self.0.data {
+            write!(f, "{:x?}", *b)?;
+        }
+        Ok(())
+    }    
+}
 
 impl ChannelId {
     pub fn new<T>(value: T) -> Self

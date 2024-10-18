@@ -3,13 +3,10 @@ runner = "espflash flash --monitor"
 
 
 [env]
-ESP_LOGLEVEL="INFO"
+ESP_LOG="info"
+
 [build]
 rustflags = [
-  "-C", "link-arg=-Tlinkall.x",
-
-  "-C", "link-arg=-Trom_functions.x",
-
   "-C", "link-arg=-nostartfiles",
 ]
 

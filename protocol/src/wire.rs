@@ -4,15 +4,10 @@ use core::{hash::Hash, marker::PhantomData, fmt::Debug};
 use log;
 
 use crate::{
-    crypto::ChannelId, 
-    crypto::Crypto,
-    sync::{
+    crypto::ChannelId, crypto::Crypto, storage::IO, sync::{
         SyncRequest,
         SyncResponse,
-    },
-    storage::IO,
-    NodeId,
-    Client,
+    }, Client, ClientError, NodeId
 };
 
 
@@ -35,11 +30,18 @@ pub enum WireError {
     DeserializeError(postcard::Error),
     WrongBlock(u16),
     NotPacket,
+    ClientError(ClientError),
 }
 
 impl From<postcard::Error> for WireError {
     fn from(value: postcard::Error) -> Self {
         WireError::DeserializeError(value)
+    }
+}
+
+impl From<ClientError> for WireError {
+    fn from(value: ClientError) -> Self {
+        WireError::ClientError(value)
     }
 }
 
@@ -115,7 +117,10 @@ A,
     last_received: u64,  // Epoch ms
     next_hello: u64,     // Epoch ms
     hello_duration: u64, // Duration ms
+    bytes_budget: u32,
+    next_session_id: u32,
     next_message_number: u16,
+    to_send: Option<NetworkProtocol<MAX_CHANNELS, MAX_NODES, MAX_RESPONSE>>,
     receivers: FnvIndexMap<A, Receiver, MAX_NODES>,
     mtu: u16,
     _io: PhantomData<I>,
@@ -140,7 +145,10 @@ A: Eq + PartialEq + Hash + Debug + Clone,
             last_received: 0,
             next_hello: 0,
             hello_duration: 5000,
+            bytes_budget: 4096,
+            next_session_id: 0,
             next_message_number: 0,
+            to_send: None,
             receivers: FnvIndexMap::new(),
             mtu,
             _io: PhantomData,
@@ -148,8 +156,7 @@ A: Eq + PartialEq + Hash + Debug + Clone,
         }
     }
 
-    pub fn receive_packet(&mut self, data: &[u8], from: A) -> Result<(), WireError> {
-
+    pub fn receive_packet(&mut self, data: &[u8], from: A, client: &mut Client<MAX_CHANNELS, MAX_NODES, I, P>) -> Result<(), WireError> {
         let received_message_number = match WireReader::check_packet(data) {
             Ok(number) => number,
             Err(e) => {
@@ -182,6 +189,7 @@ A: Eq + PartialEq + Hash + Debug + Clone,
                 return Ok(());
             }
         }
+
         if receive_info.reader.is_none() {
             let Ok(r) = WireReader::new(data, self.mtu) else {
                 log::info!("Could not construct wire reader");
@@ -220,28 +228,47 @@ A: Eq + PartialEq + Hash + Debug + Clone,
         };
 
         if let Some(value) = result {
+            log::info!("got data {:?}", value);
             let command: NetworkProtocol<MAX_CHANNELS, MAX_NODES, MAX_RESPONSE> = from_bytes(&value)
                 .expect("could not parse message");
+
             receive_info.last_completed = Some(received_message_number);
-            log::info!("Got a result {:?}", command);
+            log::info!("Got a result! {:?}", command);
+
+            self.process_message(command, client)?;
         }
 
         Ok(())
     }
 
+
+
     pub fn poll(&mut self, buffer: &mut [u8], now: u64, peer_count: u8, channel_ids: &[ChannelId], repair_count: u32, client: &Client<MAX_CHANNELS, MAX_NODES, I, P> ) -> Result<PollResult, WireError> {
-        let result = if self.next_hello > now {
-            PollResult {
-                next_poll: self.next_hello - now,
-                writer: None,
-            }
-            
+      
+
+        let to_send = self.to_send.take();
+
+        if to_send.is_some() {
+            log::info!("HAVE MESSAGE TO SEND!");
+        }
+
+        let maby_messsage = if let Some(message) = to_send {
+            log::info!("have message to send: {:?}", &message);
+            Some(message)
+        } else  if self.next_hello > now {
+            None 
         } else {
+            log::info!("time to send hello");
             self.next_hello = now + self.hello_duration;
             let hello: NetworkProtocol<MAX_CHANNELS, MAX_NODES, MAX_RESPONSE> = self.make_hello(peer_count, channel_ids, client);
+            Some(hello)
+        };
+
+        let result = if let Some(message) = maby_messsage {
+            log::info!("size of {:?} {}", &message, core::mem::size_of_val(&message));
 
             // write to buffer
-            let wrote = to_slice(&hello, buffer)?;
+            let wrote = to_slice(&message, buffer)?;
 
             // make writer
             let writer = WireWriter::new(self.next_message_number, self.mtu, &wrote, repair_count);
@@ -252,33 +279,107 @@ A: Eq + PartialEq + Hash + Debug + Clone,
                 next_poll: self.hello_duration + now,
                 writer: Some(writer),
             }
+        } else {
+            PollResult {
+                next_poll: self.next_hello - now,
+                writer: None,
+            }
         };
+
         Ok(result)
     }
 
-    fn make_hello(&self, peer_count: u8, channel_ids: &[ChannelId], client: &Client<MAX_CHANNELS, MAX_NODES, I, P>) -> NetworkProtocol<MAX_CHANNELS, MAX_NODES, MAX_RESPONSE> {
-    
-    let mut channel_info = Vec::new();
+    fn process_message(&mut self, message: NetworkProtocol<MAX_CHANNELS, MAX_NODES, MAX_RESPONSE>, client: &mut Client<MAX_CHANNELS, MAX_NODES, I, P>) -> Result<(), WireError> {
+        match message {
+            NetworkProtocol::SyncRequest(r) => {
+                log::info!("got sync request");
 
-    for channel_id in channel_ids {
-        let message_count = client.message_count(&channel_id)
-            .expect("could not get message count");
+            },
 
-        let info = ChannelInfo {
-            channel_id: channel_id.clone(),
-            message_count,
-        };
-        channel_info.push(info).expect("too many channels");
+            NetworkProtocol::SyncResponse(r) => {
+                log::info!("got sync response");
+
+            },
+
+            NetworkProtocol::Hello { pub_key_id, peer_count, channel_info } => {
+                for info in channel_info {
+                    log::info!("got channel info {:?}", &info);
+                    let channel_id = &info.channel_id;
+                    match client.message_count(channel_id) {
+                        Ok(count) => {
+                            // see if they have things we don't and sync if so
+                            // BUG: we should actually check here instead of just always
+                            //      asking
+                            if self.to_send.is_none() {
+                                let request = self.make_sync_request(channel_id, client)?;
+                                log::info!("made sink request {:?}", &request);
+                                self.to_send = Some(request);
+                            } else {
+                                log::info!("already had message to send: {:?}", self.to_send);
+                            }
+                        },
+                        Err(ClientError::UnknownChannel) => {
+                            log::info!("unknown channel id! {:?}", channel_id);
+                            //BOOG client.add_channel(pub_key_id, channel_id.clone(), io)?;
+                            // we don't have channel so lets sync it.
+                            if self.to_send.is_none() {
+                                log::info!("requesting unknown channel");
+                                let request = self.make_sync_request(channel_id, client)?;
+                                self.to_send = Some(request);
+                                log::info!("Done building request");
+
+                            } else {
+                                log::info!("already had message to send: {:?}", self.to_send);
+                            }
+                        },
+                        Err(e) => {
+                            log::error!("Unexpected ClientError {:?}", e);
+                            return Ok(());
+                        }
+                    }
+                }
+            },
+        }
+
+        Ok(())
     }
 
-    let node_id = client.get_node_id();
-    
-     NetworkProtocol::Hello {
-        pub_key_id: node_id,
-        peer_count,
-        channel_info,
-     }
-}
+    fn make_sync_request(&mut self, channel_id: &ChannelId, client: &Client<MAX_CHANNELS, MAX_NODES, I, P>) -> Result<NetworkProtocol<MAX_CHANNELS, MAX_NODES, MAX_RESPONSE>, WireError> {
+        let mut request = SyncRequest::<MAX_NODES> {
+            session_id: self.next_session_id,
+            bytes_budget: self.bytes_budget,
+            vector_clock: heapless::Vec::new(),
+        };
+
+        self.next_session_id = self.next_session_id.wrapping_add(1);
+
+        client.finish_sync_request(channel_id, &mut request)?;
+
+        Ok(NetworkProtocol::SyncRequest(request))
+    }
+
+    fn make_hello(&self, peer_count: u8, channel_ids: &[ChannelId], client: &Client<MAX_CHANNELS, MAX_NODES, I, P>) -> NetworkProtocol<MAX_CHANNELS, MAX_NODES, MAX_RESPONSE> {
+        let mut channel_info = Vec::new();
+
+        for channel_id in channel_ids {
+            let message_count = client.message_count(&channel_id)
+                .expect("could not get message count");
+
+            let info = ChannelInfo {
+                channel_id: channel_id.clone(),
+                message_count,
+            };
+            channel_info.push(info).expect("too many channels");
+        }
+
+        let node_id = client.get_node_id();
+        
+        NetworkProtocol::Hello {
+            pub_key_id: node_id,
+            peer_count,
+            channel_info,
+        }
+    }
 }
 
 

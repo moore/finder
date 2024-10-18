@@ -61,12 +61,12 @@ use protocol::{
 
 use rsa::pkcs1::{DecodeRsaPrivateKey, EncodeRsaPublicKey};
 
-const MEGA_BYTE: usize = 1024 * 10; //* 1024;
+const MEGA_BYTE: usize = 1024 ;//* 10; //* 1024;
 const SLAB_SIZE: usize = 1024;
-const MAX_CHANNELS: usize = 4;
+const MAX_CHANNELS: usize = 2;
 const MAX_NODES: usize = 2;
 const ESP_NOW_MTU: u16 = 250;
-const MAX_RESPONSE: usize = 1024 * 10;
+const MAX_RESPONSE: usize = 1024 * 2; //* 10;
 const REPAIR_COUNT: u32 = 3;
 const WIFI_HEAP: usize = 65536;
 
@@ -74,6 +74,8 @@ const MESSAGE_MAX: usize = size_of::<NetworkProtocol<MAX_CHANNELS, MAX_NODES, MA
 
 static MESSAGE_BUFFER: StaticAllocation<[u8; MESSAGE_MAX]> = StaticAllocation::wrap([0u8 ; MESSAGE_MAX]);
 static MEMIO_BUFFER: StaticAllocation<[u8; MEGA_BYTE]> = StaticAllocation::wrap([0u8; MEGA_BYTE]);
+static MEMIO_BUFFER2: StaticAllocation<[u8; MEGA_BYTE]> = StaticAllocation::wrap([0u8; MEGA_BYTE]);
+
 static CHANNELS_CONST: StaticAllocation<
         ClientChannels<MAX_CHANNELS, MAX_NODES, MemIO<'_, SLAB_SIZE>, RustCrypto>,
     > = StaticAllocation::wrap(ClientChannels::new());
@@ -184,19 +186,18 @@ C: Crypto,
     let  message_buffer = MESSAGE_BUFFER.take_mut()
     .expect("could not take message buffer");
 
-    //let mut message_number: u16 = 0;
-    //let mut next_send_time = current_millis() + 5 * 1000;
-    //let mut maybe_receiver = None;
-    //let mut last_completed = None;
     let channel_ids = [channel_id; 1];
 
     let mut state: WireState<MAX_CHANNELS, MAX_NODES, MAX_RESPONSE, I, C, [u8; 6]> = WireState::new(ESP_NOW_MTU);
 
     loop {
+        
         let r = esp_now.receive();
         if let Some(r) = r {
             let from = r.info.src_address;
+            
             if r.info.dst_address == BROADCAST_ADDRESS {
+            
                 if !esp_now.peer_exists(&r.info.src_address) {
                     esp_now
                         .add_peer(PeerInfo {
@@ -216,23 +217,31 @@ C: Crypto,
                 */
             }
 
+             
             let data: &[u8] = r.get_data();
 
-            if let Err(e) = state.receive_packet(data, from) {
-                log::debug!("error receiving packet {:?}", e);
+            
+            if let Err(e) = state.receive_packet(data, from, client) {
+                log::info!("error receiving packet {:?}", e);
                 continue;
             }
-        }
+            
+        } 
+        
 
         let now = current_millis();
-        let peer_count = esp_now.peer_count()
+        let peer_count =  esp_now.peer_count()
             .expect("could not get peer count")
             .total_count as u8; // it returns i32 but the max is 20 something
 
+        
         let result = state.poll(message_buffer, now, peer_count, &channel_ids, REPAIR_COUNT, client)
             .expect("poll returned Err");
 
+
         if let Some(mut writer) = result.writer {
+            log::info!("got writer");
+
             for _ in 0..writer.packet_count() {
                 let mut buffer = [0u8 ; 250];
 
