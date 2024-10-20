@@ -1,4 +1,4 @@
-# nexuscore
+# Finder (0xA9F4)
 
 
 ## Sync Strategy
@@ -12,7 +12,9 @@ For framing and error correction the idea is to use raptorq (https://github.com/
 Esp-Now uses a 250 byte MTU and LoRa uses a 256 byte MUT as such we will limit our discovery packets to 250 bytes. Given this we will transmit hello messages containing the hash of the public key of the device rather then the key itself. This will then use 32 bytes for a sha256.
 
 Packet
+```
 [1b block num][1b repair count][2b len][MTU - 4]
+```
 
 
 ```rust
