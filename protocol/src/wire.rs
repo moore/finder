@@ -54,7 +54,11 @@ pub struct ChannelInfo {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum NetworkProtocol<const MAX_CHANNELS: usize, const MAX_NODES: usize, const RESPONSE_MAX: usize> {
+pub enum NetworkProtocol<
+    const MAX_CHANNELS: usize, 
+    const MAX_NODES: usize, 
+    const RESPONSE_MAX: usize
+    > {
     Hello {
         pub_key_id: NodeId,
         peer_count: u8,
@@ -82,7 +86,7 @@ pub enum NetworkProtocol<const MAX_CHANNELS: usize, const MAX_NODES: usize, cons
 ///   is observed from other device try to piggy back off it and
 ///   try to avoid sending while channel is busy.
 /// 
-/// - If SyncResponse is seen of channel try to consume even it 
+/// - If SyncResponse is seen on channel try to consume even it 
 ///   it was not requested. 
 /// 
 /// - If new message is generated locally send SyncResponse with new message(s)

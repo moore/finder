@@ -153,43 +153,6 @@ fn main() -> ! {
     println!("esp-now version {}", esp_now.get_version().unwrap());
 
     network_loop(&mut esp_now, channel_id, &mut client);
-
-
-    let mut next_send_time = time::now() + Duration::secs(5);
-    loop {
-        let r = esp_now.receive();
-        if let Some(r) = r {
-            println!("Received {:?}", r);
-
-            if r.info.dst_address == BROADCAST_ADDRESS {
-                if !esp_now.peer_exists(&r.info.src_address) {
-                    esp_now
-                        .add_peer(PeerInfo {
-                            peer_address: r.info.src_address,
-                            lmk: None,
-                            channel: None,
-                            encrypt: false,
-                        })
-                        .unwrap();
-                }
-                let status = esp_now
-                    .send(&r.info.src_address, b"Hello Peer")
-                    .unwrap()
-                    .wait();
-                println!("Send hello to peer status: {:?}", status);
-            }
-        }
-
-        if time::now() >= next_send_time {
-            next_send_time = time::now() + Duration::secs(5);
-            println!("Send");
-            let status = esp_now
-                .send(&BROADCAST_ADDRESS, b"0123456789")
-                .unwrap()
-                .wait();
-            println!("Send broadcast status: {:?}", status)
-        }
-    }
 }
 
 
@@ -198,7 +161,7 @@ const MAX_CHANNELS: usize,
 const MAX_NODES: usize,
 I: IO,
 C: Crypto,
->(esp_now: &mut EspNow, channel_id: ChannelId, client: &mut Client<MAX_CHANNELS, MAX_NODES, I, C>) -> !{
+>(esp_now: &mut EspNow, channel_id: ChannelId, client: &mut Client<MAX_CHANNELS, MAX_NODES, I, C>) -> ! {
     let  message_buffer = MESSAGE_BUFFER.take_mut()
     .expect("could not take message buffer");
 
